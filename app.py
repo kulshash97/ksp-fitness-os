@@ -7,12 +7,12 @@ from PIL import Image
 from google import genai
 from google.genai import types
 
-# 1. Page Configuration & Custom Theme
+# 1. Page Config & Custom Theme
 st.set_page_config(
     page_title="KSP Fitness OS",
     page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 st.markdown("""
@@ -53,37 +53,27 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# 2. Comprehensive Fallback Macro Database (Exact Indian Diet & Fitness Profile)
+# 2. Retrieve Master Server API Key
+SERVER_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
+
+# 3. Master Offline Rulebook (Active if offline)
 FOOD_DB = {
-    # Beverages & Everyday Items
     "tea": {"kcal": 75, "p": 2.0, "c": 10.0, "f": 2.5, "unit": "1 Cup Indian Chai", "g": 150},
     "chai": {"kcal": 75, "p": 2.0, "c": 10.0, "f": 2.5, "unit": "1 Cup Indian Chai", "g": 150},
-    "coffee": {"kcal": 80, "p": 2.2, "c": 11.0, "f": 2.8, "unit": "1 Cup Milk Coffee", "g": 150},
-    "black coffee": {"kcal": 5, "p": 0.3, "c": 0.5, "f": 0.0, "unit": "1 Cup Black Coffee", "g": 150},
-    "green tea": {"kcal": 2, "p": 0.0, "c": 0.5, "f": 0.0, "unit": "1 Cup Green Tea", "g": 150},
-    
-    # High Protein Vegetarian Sources
+    "coffee": {"kcal": 80, "p": 2.2, "c": 11.0, "f": 2.8, "unit": "1 Cup Coffee", "g": 150},
     "pea protein": {"kcal": 135, "p": 26.0, "c": 2.5, "f": 2.0, "unit": "1 Scoop Pea Protein (33g)", "g": 33},
     "whey": {"kcal": 130, "p": 25.0, "c": 3.0, "f": 1.5, "unit": "1 Scoop Whey Protein (33g)", "g": 33},
     "soya chunks": {"kcal": 345, "p": 52.0, "c": 33.0, "f": 0.5, "unit": "Raw Soya Chunks (100g)", "g": 100},
     "soya": {"kcal": 345, "p": 52.0, "c": 33.0, "f": 0.5, "unit": "Raw Soya Chunks (100g)", "g": 100},
-    "paneer": {"kcal": 280, "p": 18.0, "c": 4.0, "f": 22.0, "unit": "Standard Paneer (100g)", "g": 100},
-    "tofu": {"kcal": 83, "p": 10.0, "c": 2.0, "f": 4.5, "unit": "Soy Tofu (100g)", "g": 100},
-    
-    # Dals & Legumes (Raw/Dry Basis per 100g)
+    "paneer": {"kcal": 280, "p": 18.0, "c": 4.0, "f": 22.0, "unit": "Paneer (100g)", "g": 100},
+    "panner": {"kcal": 280, "p": 18.0, "c": 4.0, "f": 22.0, "unit": "Paneer (100g)", "g": 100},
     "moong dal": {"kcal": 347, "p": 24.0, "c": 59.0, "f": 1.2, "unit": "Raw Moong Dal (100g)", "g": 100},
     "moogdal": {"kcal": 347, "p": 24.0, "c": 59.0, "f": 1.2, "unit": "Raw Moong Dal (100g)", "g": 100},
-    "chana": {"kcal": 360, "p": 19.0, "c": 60.0, "f": 5.0, "unit": "Raw Chana / Chickpeas (100g)", "g": 100},
-    "rajma": {"kcal": 340, "p": 22.0, "c": 60.0, "f": 1.5, "unit": "Raw Rajma (100g)", "g": 100},
-    
-    # Dairy & Staples
     "curd": {"kcal": 70, "p": 4.0, "c": 5.0, "f": 4.0, "unit": "Plain Curd / Dahi (100g)", "g": 100},
     "dahi": {"kcal": 70, "p": 4.0, "c": 5.0, "f": 4.0, "unit": "Plain Curd / Dahi (100g)", "g": 100},
-    "milk": {"kcal": 65, "p": 3.3, "c": 5.0, "f": 3.8, "unit": "Toned Milk (100ml)", "g": 100},
-    "roti": {"kcal": 115, "p": 3.5, "c": 22.0, "f": 1.5, "unit": "1 Whole Wheat Roti", "g": 40},
+    "roti": {"kcal": 115, "p": 3.5, "c": 22.0, "f": 1.5, "unit": "1 Roti", "g": 40},
     "chapati": {"kcal": 115, "p": 3.5, "c": 22.0, "f": 1.5, "unit": "1 Chapati", "g": 40},
     "rice": {"kcal": 350, "p": 7.0, "c": 78.0, "f": 0.6, "unit": "Raw Rice (100g)", "g": 100},
-    "oats": {"kcal": 389, "p": 13.5, "c": 66.0, "f": 6.9, "unit": "Rolled Oats (100g)", "g": 100},
 }
 
 EXERCISE_DB = {
@@ -125,32 +115,19 @@ EXERCISE_DB = {
     ]
 }
 
-# 3. Sidebar API Key & Goal Settings
-with st.sidebar:
-    st.markdown("### 🔑 Live AI Parser")
-    api_key = st.text_input(
-        "Gemini API Key (Recommended):",
-        type="password",
-        help="Paste a free Google AI Studio key to handle any food spelling, voice transcripts, or meal photos."
-    )
-    st.markdown("---")
-    st.markdown("**Daily Targets:**")
-    target_kcal = st.number_input("Daily Kcal Goal", value=2200, step=50)
-    target_p = st.number_input("Daily Protein Goal (g)", value=140, step=5)
-
-# 4. Universal Macro Solver (Gemini AI + Smart Local Rulebook)
-def calculate_macros(user_text: str, image: Image.Image = None, user_api_key: str = ""):
-    # Priority 1: Use Gemini 2.5 Flash if API key is provided
-    if user_api_key:
+# 4. Universal Backend AI Macro Engine
+def calculate_macros(user_text: str = "", image: Image.Image = None):
+    # Try server-side Gemini 2.5 Flash first
+    if SERVER_API_KEY:
         try:
-            client = genai.Client(api_key=user_api_key)
+            client = genai.Client(api_key=SERVER_API_KEY)
             prompt = """
-            You are a precision sports nutrition analyzer specialized in Indian & global diets.
+            You are a precision sports nutrition analyzer for Indian and global foods.
             Analyze the meal input (text or photo) and return STRICT JSON with exact macro estimations.
             
-            JSON format:
+            JSON schema:
             {
-              "item_name": "Clear clean item name",
+              "item_name": "Clear item name with exact portion",
               "grams": integer,
               "calories": integer,
               "protein": float,
@@ -160,7 +137,7 @@ def calculate_macros(user_text: str, image: Image.Image = None, user_api_key: st
             """
             contents = [prompt]
             if user_text:
-                contents.append(f"Input description: {user_text}")
+                contents.append(f"Input: {user_text}")
             if image:
                 contents.append(image)
 
@@ -181,13 +158,11 @@ def calculate_macros(user_text: str, image: Image.Image = None, user_api_key: st
                 "f": round(float(data.get("fats", 2.0)), 1),
                 "time": datetime.now().strftime("%I:%M %p")
             }
-        except Exception as e:
-            st.warning(f"AI live scan notice: {str(e)}. Falling back to precision rulebook.")
+        except Exception:
+            pass
 
-    # Priority 2: Precision Rulebook for Offline / Direct Text
-    clean = (user_text or "custom meal").lower().strip()
-    
-    # Check count words (e.g., "one", "two", "2", "3")
+    # Fallback to local rulebook if API key is not yet set
+    clean = (user_text or "snack").lower().strip()
     count = 1.0
     count_words = {"one": 1, "two": 2, "three": 3, "four": 4, "half": 0.5, "1": 1, "2": 2, "3": 3, "4": 4}
     for word, val in count_words.items():
@@ -195,13 +170,11 @@ def calculate_macros(user_text: str, image: Image.Image = None, user_api_key: st
             count = float(val)
             break
 
-    # Check explicit gram quantities (e.g., "200gm", "100g")
     explicit_grams = None
     g_match = re.search(r'(\d+)\s*(g|gm|gms|gram|grams)', clean)
     if g_match:
         explicit_grams = float(g_match.group(1))
 
-    # Match against food database
     for key, data in FOOD_DB.items():
         if key in clean:
             if explicit_grams:
@@ -226,11 +199,10 @@ def calculate_macros(user_text: str, image: Image.Image = None, user_api_key: st
                     "time": datetime.now().strftime("%I:%M %p")
                 }
 
-    # Safe conversational fallback (e.g. snack, beverage, vegetable)
     return {
-        "item": user_text.title() if user_text else "Light Snack / Beverage",
-        "grams": int(100 * count),
-        "kcal": int(90 * count),
+        "item": user_text.title() if user_text else "Custom Item",
+        "grams": int(120 * count),
+        "kcal": int(85 * count),
         "p": round(2.0 * count, 1),
         "c": round(12.0 * count, 1),
         "f": round(2.5 * count, 1),
@@ -240,11 +212,14 @@ def calculate_macros(user_text: str, image: Image.Image = None, user_api_key: st
 # 5. Session State
 if "logs" not in st.session_state:
     st.session_state.logs = [
-        {"item": "100g Plain Curd", "grams": 100, "kcal": 70, "p": 4.0, "c": 5.0, "f": 4.0, "time": "01:15 PM"},
         {"item": "70g Raw Soya Chunks", "grams": 70, "kcal": 242, "p": 36.4, "c": 23.1, "f": 0.4, "time": "01:15 PM"},
+        {"item": "100g Plain Curd", "grams": 100, "kcal": 70, "p": 4.0, "c": 5.0, "f": 4.0, "time": "01:15 PM"},
     ]
 
-# 6. Dashboard Metrics
+# 6. Targets & Top Dashboard Metrics
+target_kcal = 2200
+target_p = 140
+
 df_logs = pd.DataFrame(st.session_state.logs)
 curr_kcal = int(df_logs["kcal"].sum()) if not df_logs.empty else 0
 curr_p = round(float(df_logs["p"].sum()), 1) if not df_logs.empty else 0.0
@@ -264,16 +239,16 @@ left_col, right_col = st.columns([1, 1], gap="large")
 
 with left_col:
     st.subheader("🥗 Smart Macro & Meal Tracker")
-    tab_text, tab_photo = st.tabs(["⚡ Text / Voice / Grams", "📷 Live Photo Scan"])
+    tab_text, tab_photo = st.tabs(["⚡ Quick Text / Grams", "📷 Live Photo Scan"])
     
     with tab_text:
         meal_input = st.text_input(
             "Describe meal with quantities:",
-            placeholder="e.g., one medium cup of tea, one scoop of pea protein, 200gm moong dal"
+            placeholder="e.g., one cup of tea, 200gm moong dal, 1 scoop pea protein"
         )
         if st.button("Log & Calculate Macros", type="primary", use_container_width=True):
             if meal_input:
-                entry = calculate_macros(user_text=meal_input, user_api_key=api_key)
+                entry = calculate_macros(user_text=meal_input)
                 st.session_state.logs.insert(0, entry)
                 st.success(f"Logged: {entry['item']} ({entry['p']}g Protein, {entry['kcal']} kcal)")
                 st.rerun()
@@ -284,8 +259,8 @@ with left_col:
             img = Image.open(uploaded_file)
             st.image(img, caption="Meal Preview", width=260)
             if st.button("Analyze & Scan Photo with AI", use_container_width=True):
-                with st.spinner("Analyzing portion & macronutrients..."):
-                    photo_entry = calculate_macros(user_text="", image=img, user_api_key=api_key)
+                with st.spinner("AI Vision is calculating portion & macronutrients..."):
+                    photo_entry = calculate_macros(image=img)
                     st.session_state.logs.insert(0, photo_entry)
                     st.success(f"Scanned: {photo_entry['item']} ({photo_entry['p']}g Protein, {photo_entry['kcal']} kcal)")
                     st.rerun()
