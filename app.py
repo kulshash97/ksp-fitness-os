@@ -4,9 +4,10 @@ import re
 import json
 from datetime import datetime
 from PIL import Image
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
-# 1. Page Config & Branding
+# 1. Page Configuration & Custom Theme
 st.set_page_config(
     page_title="KSP Fitness OS",
     page_icon="⚡",
@@ -14,7 +15,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Dark Slate Theme Styling
 st.markdown("""
 <style>
     .ksp-header {
@@ -53,25 +53,37 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# 2. Master Indian & Fitness Nutrition Rulebook (Fallback Engine)
-NUTRITION_DB = {
-    "moong dal": {"kcal": 347, "p": 24.0, "c": 59.0, "f": 1.2, "name": "Raw Moong Dal"},
-    "moogdal": {"kcal": 347, "p": 24.0, "c": 59.0, "f": 1.2, "name": "Raw Moong Dal"},
-    "paneer": {"kcal": 280, "p": 18.0, "c": 4.0, "f": 22.0, "name": "Standard Paneer"},
-    "panner": {"kcal": 280, "p": 18.0, "c": 4.0, "f": 22.0, "name": "Standard Paneer"},
-    "soya chunks": {"kcal": 345, "p": 52.0, "c": 33.0, "f": 0.5, "name": "Raw Soya Chunks"},
-    "soya": {"kcal": 345, "p": 52.0, "c": 33.0, "f": 0.5, "name": "Raw Soya Chunks"},
-    "pea protein": {"kcal": 135, "p": 26.0, "c": 2.5, "f": 2.0, "name": "Pea Protein Scoop (33g)", "fixed_grams": 33},
-    "pea protine": {"kcal": 135, "p": 26.0, "c": 2.5, "f": 2.0, "name": "Pea Protein Scoop (33g)", "fixed_grams": 33},
-    "whey": {"kcal": 130, "p": 25.0, "c": 3.0, "f": 1.5, "name": "Whey Protein Scoop (33g)", "fixed_grams": 33},
-    "curd": {"kcal": 70, "p": 4.0, "c": 5.0, "f": 4.0, "name": "Plain Curd / Dahi"},
-    "dahi": {"kcal": 70, "p": 4.0, "c": 5.0, "f": 4.0, "name": "Plain Curd / Dahi"},
-    "chana": {"kcal": 360, "p": 19.0, "c": 60.0, "f": 5.0, "name": "Raw Chana / Chickpeas"},
-    "rajma": {"kcal": 340, "p": 22.0, "c": 60.0, "f": 1.5, "name": "Raw Rajma"},
-    "tofu": {"kcal": 83, "p": 10.0, "c": 2.0, "f": 4.5, "name": "Soy Tofu"},
-    "oats": {"kcal": 389, "p": 13.5, "c": 66.0, "f": 6.9, "name": "Rolled Oats"},
-    "rice": {"kcal": 360, "p": 7.0, "c": 80.0, "f": 0.6, "name": "Raw Rice"},
-    "roti": {"kcal": 120, "p": 3.5, "c": 22.0, "f": 1.5, "name": "Whole Wheat Roti (1 pc / 40g)"},
+# 2. Comprehensive Fallback Macro Database (Exact Indian Diet & Fitness Profile)
+FOOD_DB = {
+    # Beverages & Everyday Items
+    "tea": {"kcal": 75, "p": 2.0, "c": 10.0, "f": 2.5, "unit": "1 Cup Indian Chai", "g": 150},
+    "chai": {"kcal": 75, "p": 2.0, "c": 10.0, "f": 2.5, "unit": "1 Cup Indian Chai", "g": 150},
+    "coffee": {"kcal": 80, "p": 2.2, "c": 11.0, "f": 2.8, "unit": "1 Cup Milk Coffee", "g": 150},
+    "black coffee": {"kcal": 5, "p": 0.3, "c": 0.5, "f": 0.0, "unit": "1 Cup Black Coffee", "g": 150},
+    "green tea": {"kcal": 2, "p": 0.0, "c": 0.5, "f": 0.0, "unit": "1 Cup Green Tea", "g": 150},
+    
+    # High Protein Vegetarian Sources
+    "pea protein": {"kcal": 135, "p": 26.0, "c": 2.5, "f": 2.0, "unit": "1 Scoop Pea Protein (33g)", "g": 33},
+    "whey": {"kcal": 130, "p": 25.0, "c": 3.0, "f": 1.5, "unit": "1 Scoop Whey Protein (33g)", "g": 33},
+    "soya chunks": {"kcal": 345, "p": 52.0, "c": 33.0, "f": 0.5, "unit": "Raw Soya Chunks (100g)", "g": 100},
+    "soya": {"kcal": 345, "p": 52.0, "c": 33.0, "f": 0.5, "unit": "Raw Soya Chunks (100g)", "g": 100},
+    "paneer": {"kcal": 280, "p": 18.0, "c": 4.0, "f": 22.0, "unit": "Standard Paneer (100g)", "g": 100},
+    "tofu": {"kcal": 83, "p": 10.0, "c": 2.0, "f": 4.5, "unit": "Soy Tofu (100g)", "g": 100},
+    
+    # Dals & Legumes (Raw/Dry Basis per 100g)
+    "moong dal": {"kcal": 347, "p": 24.0, "c": 59.0, "f": 1.2, "unit": "Raw Moong Dal (100g)", "g": 100},
+    "moogdal": {"kcal": 347, "p": 24.0, "c": 59.0, "f": 1.2, "unit": "Raw Moong Dal (100g)", "g": 100},
+    "chana": {"kcal": 360, "p": 19.0, "c": 60.0, "f": 5.0, "unit": "Raw Chana / Chickpeas (100g)", "g": 100},
+    "rajma": {"kcal": 340, "p": 22.0, "c": 60.0, "f": 1.5, "unit": "Raw Rajma (100g)", "g": 100},
+    
+    # Dairy & Staples
+    "curd": {"kcal": 70, "p": 4.0, "c": 5.0, "f": 4.0, "unit": "Plain Curd / Dahi (100g)", "g": 100},
+    "dahi": {"kcal": 70, "p": 4.0, "c": 5.0, "f": 4.0, "unit": "Plain Curd / Dahi (100g)", "g": 100},
+    "milk": {"kcal": 65, "p": 3.3, "c": 5.0, "f": 3.8, "unit": "Toned Milk (100ml)", "g": 100},
+    "roti": {"kcal": 115, "p": 3.5, "c": 22.0, "f": 1.5, "unit": "1 Whole Wheat Roti", "g": 40},
+    "chapati": {"kcal": 115, "p": 3.5, "c": 22.0, "f": 1.5, "unit": "1 Chapati", "g": 40},
+    "rice": {"kcal": 350, "p": 7.0, "c": 78.0, "f": 0.6, "unit": "Raw Rice (100g)", "g": 100},
+    "oats": {"kcal": 389, "p": 13.5, "c": 66.0, "f": 6.9, "unit": "Rolled Oats (100g)", "g": 100},
 }
 
 EXERCISE_DB = {
@@ -113,138 +125,126 @@ EXERCISE_DB = {
     ]
 }
 
-# 3. Sidebar API Key Config
+# 3. Sidebar API Key & Goal Settings
 with st.sidebar:
-    st.markdown("### 🔑 AI Vision Setup")
-    api_key = st.text_input("Gemini API Key (Optional):", type="password", help="Get a free key from Google AI Studio to unlock live image recognition.")
+    st.markdown("### 🔑 Live AI Parser")
+    api_key = st.text_input(
+        "Gemini API Key (Recommended):",
+        type="password",
+        help="Paste a free Google AI Studio key to handle any food spelling, voice transcripts, or meal photos."
+    )
     st.markdown("---")
-    st.markdown("**Targets:**")
+    st.markdown("**Daily Targets:**")
     target_kcal = st.number_input("Daily Kcal Goal", value=2200, step=50)
     target_p = st.number_input("Daily Protein Goal (g)", value=140, step=5)
 
-# 4. Parsing Functions
-def parse_text_macros(text):
-    clean = text.lower().strip()
+# 4. Universal Macro Solver (Gemini AI + Smart Local Rulebook)
+def calculate_macros(user_text: str, image: Image.Image = None, user_api_key: str = ""):
+    # Priority 1: Use Gemini 2.5 Flash if API key is provided
+    if user_api_key:
+        try:
+            client = genai.Client(api_key=user_api_key)
+            prompt = """
+            You are a precision sports nutrition analyzer specialized in Indian & global diets.
+            Analyze the meal input (text or photo) and return STRICT JSON with exact macro estimations.
+            
+            JSON format:
+            {
+              "item_name": "Clear clean item name",
+              "grams": integer,
+              "calories": integer,
+              "protein": float,
+              "carbs": float,
+              "fats": float
+            }
+            """
+            contents = [prompt]
+            if user_text:
+                contents.append(f"Input description: {user_text}")
+            if image:
+                contents.append(image)
+
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json"
+                )
+            )
+            data = json.loads(response.text)
+            return {
+                "item": data.get("item_name", user_text or "Scanned Meal"),
+                "grams": int(data.get("grams", 150)),
+                "kcal": int(data.get("calories", 100)),
+                "p": round(float(data.get("protein", 2.0)), 1),
+                "c": round(float(data.get("carbs", 10.0)), 1),
+                "f": round(float(data.get("fats", 2.0)), 1),
+                "time": datetime.now().strftime("%I:%M %p")
+            }
+        except Exception as e:
+            st.warning(f"AI live scan notice: {str(e)}. Falling back to precision rulebook.")
+
+    # Priority 2: Precision Rulebook for Offline / Direct Text
+    clean = (user_text or "custom meal").lower().strip()
     
-    # Scoop detector (e.g. "one scope", "1 scoop", "2 scoops")
-    scoop_match = re.search(r'(\d+|one|two|three)\s*(scope|scoop|scoops)', clean)
-    num_scoops = 1
-    if scoop_match:
-        val = scoop_match.group(1)
-        word_map = {"one": 1, "two": 2, "three": 3}
-        num_scoops = word_map.get(val, int(val) if val.isdigit() else 1)
-
-    # Gram detector
-    grams = None
-    g_match = re.search(r'(\d+)\s*(g|gm|gms|gram|grams)', clean)
-    if g_match:
-        grams = float(g_match.group(1))
-    else:
-        num_match = re.match(r'^(\d+)', clean)
-        if num_match:
-            grams = float(num_match.group(1))
-
-    matched_profile = None
-    for key, profile in NUTRITION_DB.items():
-        if key in clean:
-            matched_profile = profile
+    # Check count words (e.g., "one", "two", "2", "3")
+    count = 1.0
+    count_words = {"one": 1, "two": 2, "three": 3, "four": 4, "half": 0.5, "1": 1, "2": 2, "3": 3, "4": 4}
+    for word, val in count_words.items():
+        if re.search(rf'\b{word}\b', clean):
+            count = float(val)
             break
 
-    if matched_profile:
-        if "fixed_grams" in matched_profile:
-            actual_grams = matched_profile["fixed_grams"] * num_scoops
-            return {
-                "item": f"{num_scoops} Scoop(s) {matched_profile['name']}",
-                "grams": int(actual_grams),
-                "kcal": int(matched_profile["kcal"] * num_scoops),
-                "p": round(matched_profile["p"] * num_scoops, 1),
-                "c": round(matched_profile["c"] * num_scoops, 1),
-                "f": round(matched_profile["f"] * num_scoops, 1),
-                "time": datetime.now().strftime("%I:%M %p")
-            }
-        else:
-            final_grams = grams if grams else 100
-            mult = final_grams / 100.0
-            return {
-                "item": f"{int(final_grams)}g {matched_profile['name']}",
-                "grams": int(final_grams),
-                "kcal": round(matched_profile["kcal"] * mult),
-                "p": round(matched_profile["p"] * mult, 1),
-                "c": round(matched_profile["c"] * mult, 1),
-                "f": round(matched_profile["f"] * mult, 1),
-                "time": datetime.now().strftime("%I:%M %p")
-            }
+    # Check explicit gram quantities (e.g., "200gm", "100g")
+    explicit_grams = None
+    g_match = re.search(r'(\d+)\s*(g|gm|gms|gram|grams)', clean)
+    if g_match:
+        explicit_grams = float(g_match.group(1))
 
-    # Fallback heuristic
-    final_grams = grams if grams else 150
+    # Match against food database
+    for key, data in FOOD_DB.items():
+        if key in clean:
+            if explicit_grams:
+                mult = explicit_grams / 100.0
+                return {
+                    "item": f"{int(explicit_grams)}g {data['unit']}",
+                    "grams": int(explicit_grams),
+                    "kcal": round(data["kcal"] * mult),
+                    "p": round(data["p"] * mult, 1),
+                    "c": round(data["c"] * mult, 1),
+                    "f": round(data["f"] * mult, 1),
+                    "time": datetime.now().strftime("%I:%M %p")
+                }
+            else:
+                return {
+                    "item": f"{int(count) if count == int(count) else count}x {data['unit']}",
+                    "grams": int(data["g"] * count),
+                    "kcal": int(data["kcal"] * count),
+                    "p": round(data["p"] * count, 1),
+                    "c": round(data["c"] * count, 1),
+                    "f": round(data["f"] * count, 1),
+                    "time": datetime.now().strftime("%I:%M %p")
+                }
+
+    # Safe conversational fallback (e.g. snack, beverage, vegetable)
     return {
-        "item": text.title(),
-        "grams": int(final_grams),
-        "kcal": int(final_grams * 1.5),
-        "p": round(final_grams * 0.12, 1),
-        "c": round(final_grams * 0.20, 1),
-        "f": round(final_grams * 0.04, 1),
+        "item": user_text.title() if user_text else "Light Snack / Beverage",
+        "grams": int(100 * count),
+        "kcal": int(90 * count),
+        "p": round(2.0 * count, 1),
+        "c": round(12.0 * count, 1),
+        "f": round(2.5 * count, 1),
         "time": datetime.now().strftime("%I:%M %p")
     }
-
-def analyze_photo_with_ai(image: Image.Image, key: str):
-    if not key:
-        return {
-            "item": "Visual Scan (Estimated Bowl)",
-            "grams": 250,
-            "kcal": 360,
-            "p": 24.0,
-            "c": 42.0,
-            "f": 11.0,
-            "time": datetime.now().strftime("%I:%M %p")
-        }
-    try:
-        genai.configure(api_key=key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        prompt = """
-        Analyze this meal picture. Identify the food item and estimate portion weight in grams and macronutrients.
-        Output MUST be strict JSON only with this schema:
-        {
-          "food_name": "string",
-          "grams": integer,
-          "calories": integer,
-          "protein": float,
-          "carbs": float,
-          "fats": float
-        }
-        """
-        response = model.generate_content([prompt, image])
-        clean_text = response.text.replace("```json", "").replace("```", "").strip()
-        data = json.loads(clean_text)
-        return {
-            "item": f"📷 {data.get('food_name', 'Meal')}",
-            "grams": int(data.get('grams', 200)),
-            "kcal": int(data.get('calories', 300)),
-            "p": round(float(data.get('protein', 20.0)), 1),
-            "c": round(float(data.get('carbs', 30.0)), 1),
-            "f": round(float(data.get('fats', 10.0)), 1),
-            "time": datetime.now().strftime("%I:%M %p")
-        }
-    except Exception as e:
-        st.warning(f"AI API error ({str(e)}). Using heuristic estimation.")
-        return {
-            "item": "📷 Scanned Food Item",
-            "grams": 200,
-            "kcal": 320,
-            "p": 22.0,
-            "c": 35.0,
-            "f": 9.0,
-            "time": datetime.now().strftime("%I:%M %p")
-        }
 
 # 5. Session State
 if "logs" not in st.session_state:
     st.session_state.logs = [
-        {"item": "70g Raw Soya Chunks", "grams": 70, "kcal": 242, "p": 36.4, "c": 23.1, "f": 0.4, "time": "01:15 PM"},
         {"item": "100g Plain Curd", "grams": 100, "kcal": 70, "p": 4.0, "c": 5.0, "f": 4.0, "time": "01:15 PM"},
+        {"item": "70g Raw Soya Chunks", "grams": 70, "kcal": 242, "p": 36.4, "c": 23.1, "f": 0.4, "time": "01:15 PM"},
     ]
 
-# 6. Calculations & Metric Display
+# 6. Dashboard Metrics
 df_logs = pd.DataFrame(st.session_state.logs)
 curr_kcal = int(df_logs["kcal"].sum()) if not df_logs.empty else 0
 curr_p = round(float(df_logs["p"].sum()), 1) if not df_logs.empty else 0.0
@@ -259,7 +259,7 @@ col4.metric("Fats", f"{curr_f} g")
 
 st.write("---")
 
-# 7. Dashboard 2-Column Split
+# 7. Two Column Layout
 left_col, right_col = st.columns([1, 1], gap="large")
 
 with left_col:
@@ -269,13 +269,13 @@ with left_col:
     with tab_text:
         meal_input = st.text_input(
             "Describe meal with quantities:",
-            placeholder="e.g., one scope of pea protine, 200gm dry moogdal, 100g paneer"
+            placeholder="e.g., one medium cup of tea, one scoop of pea protein, 200gm moong dal"
         )
         if st.button("Log & Calculate Macros", type="primary", use_container_width=True):
             if meal_input:
-                new_entry = parse_text_macros(meal_input)
-                st.session_state.logs.insert(0, new_entry)
-                st.success(f"Logged: {new_entry['item']} ({new_entry['p']}g Protein, {new_entry['kcal']} kcal)")
+                entry = calculate_macros(user_text=meal_input, user_api_key=api_key)
+                st.session_state.logs.insert(0, entry)
+                st.success(f"Logged: {entry['item']} ({entry['p']}g Protein, {entry['kcal']} kcal)")
                 st.rerun()
 
     with tab_photo:
@@ -284,8 +284,8 @@ with left_col:
             img = Image.open(uploaded_file)
             st.image(img, caption="Meal Preview", width=260)
             if st.button("Analyze & Scan Photo with AI", use_container_width=True):
-                with st.spinner("AI Vision is calculating portion & macros..."):
-                    photo_entry = analyze_photo_with_ai(img, api_key)
+                with st.spinner("Analyzing portion & macronutrients..."):
+                    photo_entry = calculate_macros(user_text="", image=img, user_api_key=api_key)
                     st.session_state.logs.insert(0, photo_entry)
                     st.success(f"Scanned: {photo_entry['item']} ({photo_entry['p']}g Protein, {photo_entry['kcal']} kcal)")
                     st.rerun()
