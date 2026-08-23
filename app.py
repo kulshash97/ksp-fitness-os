@@ -1,13 +1,12 @@
 import streamlit as st
 import pandas as pd
-import re
 import json
 import io
 from datetime import datetime
 from PIL import Image
 import google.generativeai as genai
 
-# 1. Page Config & Custom Theme
+# 1. Page Config & Custom Styling
 st.set_page_config(
     page_title="KSP Fitness OS Pro",
     page_icon="⚡",
@@ -48,41 +47,21 @@ st.markdown("""
 st.markdown("""
 <div class="ksp-header">
     <div class="ksp-brand">KSP Consulting & Solutions</div>
-    <div class="ksp-title">Fitness OS • Pro</div>
+    <div class="ksp-title">Fitness OS • Pro Universal</div>
     <div class="ksp-tagline">Strategy amplified, complexity simplified.</div>
 </div>
 """, unsafe_allow_html=True)
 
-# 2. Server API Key Extraction
-SERVER_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
+# 2. Extract API Key (Streamlit Secrets or Manual Input)
+api_key = st.secrets.get("GEMINI_API_KEY", "")
 
 with st.sidebar:
     st.markdown("### ⚙️ System Settings")
-    if not SERVER_API_KEY:
-        manual_key = st.text_input("Enter Gemini API Key (if not in secrets):", type="password")
-        if manual_key:
-            SERVER_API_KEY = manual_key
+    if not api_key:
+        api_key = st.text_input("Enter Gemini API Key:", type="password", help="Add GEMINI_API_KEY to Streamlit Cloud secrets to bypass this.")
     st.markdown("---")
     target_kcal = st.number_input("Daily Caloric Target", value=2200, step=50)
     target_p = st.number_input("Daily Protein Target (g)", value=140, step=5)
-
-# 3. Master Offline Rulebook
-FOOD_DB = {
-    "tea": {"kcal": 75, "p": 2.0, "c": 10.0, "f": 2.5, "unit": "1 Cup Indian Chai", "g": 150},
-    "chai": {"kcal": 75, "p": 2.0, "c": 10.0, "f": 2.5, "unit": "1 Cup Indian Chai", "g": 150},
-    "coffee": {"kcal": 80, "p": 2.2, "c": 11.0, "f": 2.8, "unit": "1 Cup Coffee", "g": 150},
-    "pea protein": {"kcal": 135, "p": 26.0, "c": 2.5, "f": 2.0, "unit": "1 Scoop Pea Protein (33g)", "g": 33},
-    "whey": {"kcal": 130, "p": 25.0, "c": 3.0, "f": 1.5, "unit": "1 Scoop Whey Protein (33g)", "g": 33},
-    "soya chunks": {"kcal": 345, "p": 52.0, "c": 33.0, "f": 0.5, "unit": "Raw Soya Chunks (100g)", "g": 100},
-    "soya": {"kcal": 345, "p": 52.0, "c": 33.0, "f": 0.5, "unit": "Raw Soya Chunks (100g)", "g": 100},
-    "paneer": {"kcal": 280, "p": 18.0, "c": 4.0, "f": 22.0, "unit": "Paneer (100g)", "g": 100},
-    "panner": {"kcal": 280, "p": 18.0, "c": 4.0, "f": 22.0, "unit": "Paneer (100g)", "g": 100},
-    "moong dal": {"kcal": 347, "p": 24.0, "c": 59.0, "f": 1.2, "unit": "Raw Moong Dal (100g)", "g": 100},
-    "curd": {"kcal": 70, "p": 4.0, "c": 5.0, "f": 4.0, "unit": "Plain Curd / Dahi (100g)", "g": 100},
-    "dahi": {"kcal": 70, "p": 4.0, "c": 5.0, "f": 4.0, "unit": "Plain Curd / Dahi (100g)", "g": 100},
-    "roti": {"kcal": 115, "p": 3.5, "c": 22.0, "f": 1.5, "unit": "1 Roti", "g": 40},
-    "rice": {"kcal": 350, "p": 7.0, "c": 78.0, "f": 0.6, "unit": "Raw Rice (100g)", "g": 100},
-}
 
 EXERCISE_DB = {
     "Push (Chest / Shoulders / Triceps)": [
@@ -123,95 +102,81 @@ EXERCISE_DB = {
     ]
 }
 
-# 4. Bulletproof Image & Text Processing Function
-def analyze_meal(user_text: str = "", pil_img: Image.Image = None):
-    if SERVER_API_KEY:
-        try:
-            genai.configure(api_key=SERVER_API_KEY)
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            
-            prompt = """
-            You are an expert sports nutritionist and vision AI.
-            Analyze this meal (image or description). 
-            If kitchen scale or package label is visible, read the exact weights (e.g. 606g gross weight, tare weight, or itemized ingredients like Soya Chunks + Curd Dahi).
-            
-            Return STRICT JSON only matching this format:
-            {
-              "item_name": "Accurate detailed name with recognized portions",
-              "grams": integer,
-              "calories": integer,
-              "protein": float,
-              "carbs": float,
-              "fats": float,
-              "source_note": "AI Vision (Read Scale / Packaging / Plate)"
-            }
-            """
-            
-            inputs = [prompt]
-            if user_text:
-                inputs.append(f"Description: {user_text}")
-            if pil_img:
-                # Resize image slightly if huge from phone camera to speed up API transfer
-                img_copy = pil_img.copy()
-                img_copy.thumbnail((1024, 1024))
-                inputs.append(img_copy)
+# 3. Pure Universal Gemini Vision & Text Parser (NO MOCKING)
+def universal_ai_nutrition_engine(user_text: str = "", pil_img: Image.Image = None, key: str = ""):
+    if not key:
+        st.error("❌ API Key Missing! Please add 'GEMINI_API_KEY' in Streamlit Secrets or enter it in the sidebar.")
+        return None
 
-            response = model.generate_content(inputs)
-            raw_text = response.text.replace("```json", "").replace("```", "").strip()
-            data = json.loads(raw_text)
+    try:
+        genai.configure(api_key=key)
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
-            return {
-                "item": data.get("item_name", "Scanned Meal"),
-                "grams": int(data.get("grams", 250)),
-                "kcal": int(data.get("calories", 350)),
-                "p": round(float(data.get("protein", 25.0)), 1),
-                "c": round(float(data.get("carbs", 30.0)), 1),
-                "f": round(float(data.get("fats", 8.0)), 1),
-                "source": data.get("source_note", "AI Vision"),
-                "time": datetime.now().strftime("%I:%M %p")
-            }
-        except Exception as e:
-            st.error(f"AI Vision Scan Warning: {e}")
+        system_prompt = """
+        You are an advanced, hyper-accurate Computer Vision Nutritionist.
+        Analyze whatever is in the image or text with complete objectivity. NO GUESSWORK OR HARDCODED ASSUMPTIONS.
+        
+        RULES:
+        1. If it is a PACKAGED product:
+           - Read the visible nutrition label, net weight, or brand name (OCR).
+           - Output the exact calories and macros for the serving or entire package visible.
+        2. If it is a COOKED or PLATED meal:
+           - Identify EVERY distinct food item, condiment, and ingredient visible.
+           - If a kitchen scale or weight readout is in the frame, read the scale number directly.
+           - Estimate realistic cooked portion weight (grams) and exact macronutrients (Protein, Carbs, Fats, Calories).
+        3. If it is RAW/UNPACKAGED ingredients (fruits, vegetables, meat, legumes):
+           - Identify the item and estimate raw weight and macros accurately.
+        4. If it is TEXT:
+           - Accurately parse the food and calculate macros according to exact quantities (e.g., '1 scoop whey', '2 rotis', '1 cup tea').
+        
+        OUTPUT FORMAT:
+        You MUST return STRICT JSON ONLY with no extra commentary or markdown:
+        {
+          "food_title": "Detailed name of what was identified",
+          "portion_grams": integer,
+          "calories": integer,
+          "protein_grams": float,
+          "carbs_grams": float,
+          "fats_grams": float,
+          "ai_observation": "1-line factual observation of what was detected in the image/text"
+        }
+        """
 
-    # Fallback Offline Parsing if no API key
-    clean = (user_text or "meal").lower().strip()
-    
-    # Specific detection for your uploaded image components if offline
-    if "soya" in clean or pil_img:
+        content_payload = [system_prompt]
+        if user_text:
+            content_payload.append(f"User Input Description: {user_text}")
+        if pil_img:
+            # Resize image to optimize network latency without losing OCR clarity
+            img_optimized = pil_img.copy()
+            img_optimized.thumbnail((1280, 1280))
+            content_payload.append(img_optimized)
+
+        response = model.generate_content(content_payload)
+        cleaned_json = response.text.replace("```json", "").replace("```", "").strip()
+        data = json.loads(cleaned_json)
+
         return {
-            "item": "Cooked Soya Chunks Sabzi + Curd (Dahi)",
-            "grams": 320,
-            "kcal": 385,
-            "p": 44.5,
-            "c": 28.0,
-            "f": 6.5,
-            "source": "Smart Heuristic Scan",
+            "item": data.get("food_title", "Identified Food"),
+            "grams": int(data.get("portion_grams", 100)),
+            "kcal": int(data.get("calories", 100)),
+            "p": round(float(data.get("protein_grams", 0.0)), 1),
+            "c": round(float(data.get("carbs_grams", 0.0)), 1),
+            "f": round(float(data.get("fats_grams", 0.0)), 1),
+            "source": data.get("ai_observation", "Gemini Vision"),
             "time": datetime.now().strftime("%I:%M %p")
         }
+    except Exception as e:
+        st.error(f"❌ Gemini Vision API Error: {str(e)}")
+        return None
 
-    return {
-        "item": user_text.title() if user_text else "Logged Meal",
-        "grams": 200,
-        "kcal": 280,
-        "p": 15.0,
-        "c": 35.0,
-        "f": 6.0,
-        "source": "Rulebook",
-        "time": datetime.now().strftime("%I:%M %p")
-    }
-
-# 5. Session State Initializers
+# 4. Session State Initializers
 if "meal_logs" not in st.session_state:
-    st.session_state.meal_logs = [
-        {"item": "70g Raw Soya Chunks + 100g Curd", "grams": 170, "kcal": 312, "p": 40.4, "c": 28.1, "f": 4.4, "source": "Scale Log", "time": "01:15 PM"},
-    ]
+    st.session_state.meal_logs = []
 
 if "workout_logs" not in st.session_state:
-    st.session_state.workout_logs = [
-        {"time": "07:30 AM", "split": "Push (Chest/Shoulders/Triceps)", "exercise": "Incline Dumbbell Press", "sets": 4, "reps": 10, "weight": 24.0, "rpe": 8.5},
-    ]
+    st.session_state.workout_logs = []
 
-# 6. Top Metrics Dashboard
+# 5. Top Metrics Dashboard
 df_meals = pd.DataFrame(st.session_state.meal_logs)
 curr_kcal = int(df_meals["kcal"].sum()) if not df_meals.empty else 0
 curr_p = round(float(df_meals["p"].sum()), 1) if not df_meals.empty else 0.0
@@ -226,57 +191,60 @@ col4.metric("Fats", f"{curr_f} g")
 
 st.write("---")
 
-# 7. Two Column Workspace
+# 6. Two Column App Structure
 left_col, right_col = st.columns([1, 1], gap="large")
 
 with left_col:
-    st.subheader("🥗 Smart Macro & Meal Tracker")
-    tab_photo, tab_text = st.tabs(["📷 AI Live Photo Scan", "⚡ Quick Text / Grams"])
+    st.subheader("🥗 Universal AI Nutrition Scanner")
+    tab_photo, tab_text = st.tabs(["📷 Universal Photo Vision", "⚡ Direct Text / Prompt"])
     
     with tab_photo:
-        uploaded_file = st.file_uploader("Snap or upload meal photo / scale reading:", type=["jpg", "png", "jpeg"])
+        uploaded_file = st.file_uploader("Upload ANY meal, package, label, fruit, or beverage photo:", type=["jpg", "png", "jpeg"])
         if uploaded_file:
             img = Image.open(uploaded_file)
-            st.image(img, caption="Loaded Meal Preview", use_container_width=True)
-            if st.button("⚡ Scan & Calculate All Macros", type="primary", use_container_width=True):
-                with st.spinner("AI Vision is inspecting bowl, ingredients, and scale reading..."):
-                    result = analyze_meal(pil_img=img)
-                    st.session_state.meal_logs.insert(0, result)
-                    st.success(f"Recognized: {result['item']} ({result['p']}g Protein, {result['kcal']} kcal)")
-                    st.rerun()
+            st.image(img, caption="Captured Image Preview", use_container_width=True)
+            if st.button("⚡ Scan & Analyze with AI Vision", type="primary", use_container_width=True):
+                with st.spinner("Analyzing image features, packaging, scale, and ingredients..."):
+                    result = universal_ai_nutrition_engine(pil_img=img, key=api_key)
+                    if result:
+                        st.session_state.meal_logs.insert(0, result)
+                        st.success(f"✅ Recognized: {result['item']} ({result['p']}g Protein, {result['kcal']} kcal)")
+                        st.rerun()
 
     with tab_text:
         meal_input = st.text_input(
-            "Describe meal with quantities:",
-            placeholder="e.g., 70g soya chunks with 100g curd, one medium cup of tea"
+            "Describe whatever you ate:",
+            placeholder="e.g., 2 bananas with 1 glass milk, 1 chicken breast, 3 parathas"
         )
-        if st.button("Log Food Entry", type="primary", use_container_width=True):
+        if st.button("Analyze & Log Food", type="primary", use_container_width=True):
             if meal_input:
-                result = analyze_meal(user_text=meal_input)
-                st.session_state.meal_logs.insert(0, result)
-                st.success(f"Logged: {result['item']} ({result['p']}g Protein, {result['kcal']} kcal)")
-                st.rerun()
+                with st.spinner("Calculating exact nutrition..."):
+                    result = universal_ai_nutrition_engine(user_text=meal_input, key=api_key)
+                    if result:
+                        st.session_state.meal_logs.insert(0, result)
+                        st.success(f"✅ Logged: {result['item']} ({result['p']}g Protein, {result['kcal']} kcal)")
+                        st.rerun()
 
     st.markdown("#### Today's Meal Log")
     if st.session_state.meal_logs:
         df_meal_disp = pd.DataFrame(st.session_state.meal_logs)[["time", "item", "p", "c", "f", "kcal", "source"]]
-        df_meal_disp.columns = ["Time", "Food Item", "Protein (g)", "Carbs (g)", "Fats (g)", "Calories (kcal)", "Source"]
+        df_meal_disp.columns = ["Time", "Food Item", "Protein (g)", "Carbs (g)", "Fats (g)", "Calories (kcal)", "AI Observation"]
         st.dataframe(df_meal_disp, use_container_width=True, hide_index=True)
-        if st.button("Clear Meals"):
+        if st.button("Clear Meal Log"):
             st.session_state.meal_logs = []
             st.rerun()
     else:
-        st.info("No meals logged yet today.")
+        st.info("No meals logged yet. Upload an image or type a food entry above.")
 
 with right_col:
     st.subheader("🏋️ Workout OS & Split Tracker")
     workout_tab1, workout_tab2 = st.tabs(["📝 Daily Workout Logger", "🎥 Form Guides & Splits"])
     
     with workout_tab1:
-        st.markdown("#### Log Active Training Session")
+        st.markdown("#### Log Training Session")
         w_split = st.selectbox(
             "Training Split:",
-            ["Push (Chest / Shoulders / Triceps)", "Pull (Back / Rear Delts / Biceps)", "Legs (Quads / Hamstrings / Calves)", "Upper / Lower"]
+            ["Push (Chest / Shoulders / Triceps)", "Pull (Back / Rear Delts / Biceps)", "Legs (Quads / Hamstrings / Calves)", "Upper / Lower", "Full Body"]
         )
         
         col_w1, col_w2 = st.columns(2)
@@ -304,7 +272,7 @@ with right_col:
                 st.success(f"Logged: {ex_name.title()} ({sets_val} sets x {reps_val} reps @ {weight_val}kg)")
                 st.rerun()
 
-        st.markdown("#### Completed Sets Today")
+        st.markdown("#### Completed Exercises Today")
         if st.session_state.workout_logs:
             df_w_disp = pd.DataFrame(st.session_state.workout_logs)[["time", "split", "exercise", "sets", "reps", "weight", "rpe"]]
             df_w_disp.columns = ["Time", "Split", "Exercise", "Sets", "Reps", "Weight (kg)", "RPE"]
@@ -313,7 +281,7 @@ with right_col:
                 st.session_state.workout_logs = []
                 st.rerun()
         else:
-            st.info("No workout logged yet today.")
+            st.info("No workout sets logged yet today.")
 
     with workout_tab2:
         muscle_choice = st.radio(
