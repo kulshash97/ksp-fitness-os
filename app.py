@@ -7,9 +7,9 @@ from PIL import Image
 from google import genai
 from google.genai import types
 
-# 1. Page Config & Custom Theme
+# 1. Page Config & Custom Styling
 st.set_page_config(
-    page_title="KSP Fitness OS",
+    page_title="KSP Fitness OS Pro",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -42,21 +42,38 @@ st.markdown("""
         font-size: 12px;
         font-style: italic;
     }
+    .badge-macro {
+        background-color: #1E293B;
+        padding: 4px 8px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: bold;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown("""
 <div class="ksp-header">
     <div class="ksp-brand">KSP Consulting & Solutions</div>
-    <div class="ksp-title">Fitness OS</div>
+    <div class="ksp-title">Fitness OS • Pro</div>
     <div class="ksp-tagline">Strategy amplified, complexity simplified.</div>
 </div>
 """, unsafe_allow_html=True)
 
-# 2. Retrieve Master Server API Key
-SERVER_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
+# 2. Secure API Key Management
+SERVER_API_KEY = ""
+if "GEMINI_API_KEY" in st.secrets:
+    SERVER_API_KEY = st.secrets["GEMINI_API_KEY"]
 
-# 3. Master Offline Rulebook (Active if offline)
+with st.sidebar:
+    st.markdown("### ⚙️ System Settings")
+    if not SERVER_API_KEY:
+        SERVER_API_KEY = st.text_input("Enter Gemini API Key:", type="password", help="Add GEMINI_API_KEY to Streamlit Cloud secrets to bypass this.")
+    st.markdown("---")
+    target_kcal = st.number_input("Daily Caloric Target", value=2200, step=50)
+    target_p = st.number_input("Daily Protein Target (g)", value=140, step=5)
+
+# 3. Master Offline Rulebook
 FOOD_DB = {
     "tea": {"kcal": 75, "p": 2.0, "c": 10.0, "f": 2.5, "unit": "1 Cup Indian Chai", "g": 150},
     "chai": {"kcal": 75, "p": 2.0, "c": 10.0, "f": 2.5, "unit": "1 Cup Indian Chai", "g": 150},
@@ -115,29 +132,35 @@ EXERCISE_DB = {
     ]
 }
 
-# 4. Universal Backend AI Macro Engine
+# 4. Pro AI Vision & Macro Engine
 def calculate_macros(user_text: str = "", image: Image.Image = None):
-    # Try server-side Gemini 2.5 Flash first
     if SERVER_API_KEY:
         try:
             client = genai.Client(api_key=SERVER_API_KEY)
             prompt = """
-            You are a precision sports nutrition analyzer for Indian and global foods.
-            Analyze the meal input (text or photo) and return STRICT JSON with exact macro estimations.
+            You are a world-class precision sports nutritionist and computer vision nutrition analyzer.
             
-            JSON schema:
+            TASK:
+            1. If an image is provided:
+               - Determine if it is a PACKAGED food (read nutrition table, serving size, net weight) or UNPACKAGED/COOKED meal (estimate ingredients, portion volume, and raw weight equivalents).
+               - Calculate exact total macros for the visible portion.
+            2. If text is provided:
+               - Extract quantities, handle colloquial terms (e.g. 'one cup tea', '2 scoops whey', '200gm moong dal', '70g soya chunks').
+            
+            Return STRICT JSON matching this schema:
             {
-              "item_name": "Clear item name with exact portion",
+              "item_name": "Clear descriptive name of item/portion",
               "grams": integer,
               "calories": integer,
               "protein": float,
               "carbs": float,
-              "fats": float
+              "fats": float,
+              "confidence_notes": "Short 1-line breakdown (e.g. Packaged Label Read / Estimated 200g portion)"
             }
             """
             contents = [prompt]
             if user_text:
-                contents.append(f"Input: {user_text}")
+                contents.append(f"User Description: {user_text}")
             if image:
                 contents.append(image)
 
@@ -150,18 +173,19 @@ def calculate_macros(user_text: str = "", image: Image.Image = None):
             )
             data = json.loads(response.text)
             return {
-                "item": data.get("item_name", user_text or "Scanned Meal"),
+                "item": data.get("item_name", user_text or "Scanned Food"),
                 "grams": int(data.get("grams", 150)),
                 "kcal": int(data.get("calories", 100)),
                 "p": round(float(data.get("protein", 2.0)), 1),
                 "c": round(float(data.get("carbs", 10.0)), 1),
                 "f": round(float(data.get("fats", 2.0)), 1),
+                "note": data.get("confidence_notes", "AI Verified"),
                 "time": datetime.now().strftime("%I:%M %p")
             }
-        except Exception:
-            pass
+        except Exception as e:
+            st.error(f"AI Vision Error: {e}")
 
-    # Fallback to local rulebook if API key is not yet set
+    # Fallback Rulebook
     clean = (user_text or "snack").lower().strip()
     count = 1.0
     count_words = {"one": 1, "two": 2, "three": 3, "four": 4, "half": 0.5, "1": 1, "2": 2, "3": 3, "4": 4}
@@ -186,6 +210,7 @@ def calculate_macros(user_text: str = "", image: Image.Image = None):
                     "p": round(data["p"] * mult, 1),
                     "c": round(data["c"] * mult, 1),
                     "f": round(data["f"] * mult, 1),
+                    "note": "Rulebook Exact Match",
                     "time": datetime.now().strftime("%I:%M %p")
                 }
             else:
@@ -196,6 +221,7 @@ def calculate_macros(user_text: str = "", image: Image.Image = None):
                     "p": round(data["p"] * count, 1),
                     "c": round(data["c"] * count, 1),
                     "f": round(data["f"] * count, 1),
+                    "note": "Standard Portion Rule",
                     "time": datetime.now().strftime("%I:%M %p")
                 }
 
@@ -206,25 +232,29 @@ def calculate_macros(user_text: str = "", image: Image.Image = None):
         "p": round(2.0 * count, 1),
         "c": round(12.0 * count, 1),
         "f": round(2.5 * count, 1),
+        "note": "Heuristic Estimate",
         "time": datetime.now().strftime("%I:%M %p")
     }
 
-# 5. Session State
-if "logs" not in st.session_state:
-    st.session_state.logs = [
-        {"item": "70g Raw Soya Chunks", "grams": 70, "kcal": 242, "p": 36.4, "c": 23.1, "f": 0.4, "time": "01:15 PM"},
-        {"item": "100g Plain Curd", "grams": 100, "kcal": 70, "p": 4.0, "c": 5.0, "f": 4.0, "time": "01:15 PM"},
+# 5. Session State Initializers
+if "meal_logs" not in st.session_state:
+    st.session_state.meal_logs = [
+        {"item": "70g Raw Soya Chunks", "grams": 70, "kcal": 242, "p": 36.4, "c": 23.1, "f": 0.4, "note": "Verified", "time": "01:15 PM"},
+        {"item": "100g Plain Curd", "grams": 100, "kcal": 70, "p": 4.0, "c": 5.0, "f": 4.0, "note": "Verified", "time": "01:15 PM"},
     ]
 
-# 6. Targets & Top Dashboard Metrics
-target_kcal = 2200
-target_p = 140
+if "workout_logs" not in st.session_state:
+    st.session_state.workout_logs = [
+        {"time": "07:30 AM", "split": "Push (Chest/Shoulders/Triceps)", "exercise": "Incline Dumbbell Press", "sets": 4, "reps": 10, "weight": 24.0, "rpe": 8.5},
+        {"time": "07:45 AM", "split": "Push (Chest/Shoulders/Triceps)", "exercise": "Flat Barbell Bench Press", "sets": 3, "reps": 8, "weight": 60.0, "rpe": 9.0},
+    ]
 
-df_logs = pd.DataFrame(st.session_state.logs)
-curr_kcal = int(df_logs["kcal"].sum()) if not df_logs.empty else 0
-curr_p = round(float(df_logs["p"].sum()), 1) if not df_logs.empty else 0.0
-curr_c = round(float(df_logs["c"].sum()), 1) if not df_logs.empty else 0.0
-curr_f = round(float(df_logs["f"].sum()), 1) if not df_logs.empty else 0.0
+# 6. Global Top Metric Ribbon
+df_meals = pd.DataFrame(st.session_state.meal_logs)
+curr_kcal = int(df_meals["kcal"].sum()) if not df_meals.empty else 0
+curr_p = round(float(df_meals["p"].sum()), 1) if not df_meals.empty else 0.0
+curr_c = round(float(df_meals["c"].sum()), 1) if not df_meals.empty else 0.0
+curr_f = round(float(df_meals["f"].sum()), 1) if not df_meals.empty else 0.0
 
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Calories", f"{curr_kcal} kcal", f"{target_kcal - curr_kcal} remaining", delta_color="inverse")
@@ -234,67 +264,111 @@ col4.metric("Fats", f"{curr_f} g")
 
 st.write("---")
 
-# 7. Two Column Layout
+# 7. Main Dashboard Grid
 left_col, right_col = st.columns([1, 1], gap="large")
 
+# LEFT PANEL: Nutrition Engine
 with left_col:
     st.subheader("🥗 Smart Macro & Meal Tracker")
-    tab_text, tab_photo = st.tabs(["⚡ Quick Text / Grams", "📷 Live Photo Scan"])
+    tab_photo, tab_text = st.tabs(["📷 AI Live Photo Scan (Packaged & Cooked)", "⚡ Text & Gram Input"])
     
+    with tab_photo:
+        uploaded_file = st.file_uploader("Snap or upload meal photo / nutrition label:", type=["jpg", "png", "jpeg"])
+        if uploaded_file:
+            img = Image.open(uploaded_file)
+            st.image(img, caption="Loaded Meal Preview", use_container_width=True)
+            if st.button("⚡ Scan & Calculate All Macros", type="primary", use_container_width=True):
+                with st.spinner("AI Vision is inspecting packaging, ingredients, and portion volume..."):
+                    photo_entry = calculate_macros(image=img)
+                    st.session_state.meal_logs.insert(0, photo_entry)
+                    st.success(f"Identified: {photo_entry['item']} ({photo_entry['p']}g Protein, {photo_entry['kcal']} kcal)")
+                    st.rerun()
+
     with tab_text:
         meal_input = st.text_input(
             "Describe meal with quantities:",
-            placeholder="e.g., one cup of tea, 200gm moong dal, 1 scoop pea protein"
+            placeholder="e.g., one medium cup of tea, 200gm moong dal, 1 scoop pea protein"
         )
-        if st.button("Log & Calculate Macros", type="primary", use_container_width=True):
+        if st.button("Log Food Entry", type="primary", use_container_width=True):
             if meal_input:
                 entry = calculate_macros(user_text=meal_input)
-                st.session_state.logs.insert(0, entry)
+                st.session_state.meal_logs.insert(0, entry)
                 st.success(f"Logged: {entry['item']} ({entry['p']}g Protein, {entry['kcal']} kcal)")
                 st.rerun()
 
-    with tab_photo:
-        uploaded_file = st.file_uploader("Upload or take meal photo:", type=["jpg", "png", "jpeg"])
-        if uploaded_file:
-            img = Image.open(uploaded_file)
-            st.image(img, caption="Meal Preview", width=260)
-            if st.button("Analyze & Scan Photo with AI", use_container_width=True):
-                with st.spinner("AI Vision is calculating portion & macronutrients..."):
-                    photo_entry = calculate_macros(image=img)
-                    st.session_state.logs.insert(0, photo_entry)
-                    st.success(f"Scanned: {photo_entry['item']} ({photo_entry['p']}g Protein, {photo_entry['kcal']} kcal)")
-                    st.rerun()
-
-    st.markdown("#### Logged Meals Today")
-    if st.session_state.logs:
-        df_display = pd.DataFrame(st.session_state.logs)[["time", "item", "p", "c", "f", "kcal"]]
-        df_display.columns = ["Time", "Food Item", "Protein (g)", "Carbs (g)", "Fats (g)", "Calories (kcal)"]
-        st.dataframe(df_display, use_container_width=True, hide_index=True)
-        if st.button("Clear Log History"):
-            st.session_state.logs = []
+    st.markdown("#### Today's Meal Log")
+    if st.session_state.meal_logs:
+        df_meal_disp = pd.DataFrame(st.session_state.meal_logs)[["time", "item", "p", "c", "f", "kcal", "note"]]
+        df_meal_disp.columns = ["Time", "Food Item", "Protein (g)", "Carbs (g)", "Fats (g)", "Calories (kcal)", "Source"]
+        st.dataframe(df_meal_disp, use_container_width=True, hide_index=True)
+        if st.button("Clear Meals"):
+            st.session_state.meal_logs = []
             st.rerun()
     else:
         st.info("No meals logged yet today.")
 
+# RIGHT PANEL: Workout Split Engine & Daily Logger
 with right_col:
-    st.subheader("🏋️ Workout Splits & Form Micro-Videos")
-    split_choice = st.selectbox(
-        "Select Active Workout Split:",
-        ["Push • Pull • Legs (6-Day)", "Arnold Split (Chest/Back, Arms, Legs)", "Upper / Lower (4-Day)"]
-    )
-    muscle_choice = st.radio(
-        "Target Muscle Group:",
-        ["Push (Chest / Shoulders / Triceps)", "Pull (Back / Rear Delts / Biceps)", "Legs (Quads / Hamstrings / Calves)"],
-        horizontal=True
-    )
-    st.write("---")
+    st.subheader("🏋️ Workout OS & Split Tracker")
     
-    for ex in EXERCISE_DB[muscle_choice]:
-        with st.expander(f"▶ {ex['name']} ({ex['target']})", expanded=True):
-            st.markdown(
-                f'<iframe width="100%" height="260" src="{ex["url"]}?autoplay=0&controls=1" frameborder="0" allowfullscreen></iframe>',
-                unsafe_allow_html=True
-            )
-            st.markdown("**Form Checklist:**")
-            for cue in ex["cues"]:
-                st.markdown(f"- {cue}")
+    workout_tab1, workout_tab2 = st.tabs(["📝 Daily Workout Logger", "🎥 Form Guides & Splits"])
+    
+    with workout_tab1:
+        st.markdown("#### Log Active Training Session")
+        w_split = st.selectbox(
+            "Training Split:",
+            ["Push (Chest / Shoulders / Triceps)", "Pull (Back / Rear Delts / Biceps)", "Legs (Quads / Hamstrings / Calves)", "Full Body / Core"]
+        )
+        
+        col_w1, col_w2 = st.columns(2)
+        with col_w1:
+            ex_name = st.text_input("Exercise Name:", placeholder="e.g., Incline DB Press")
+            sets_val = st.number_input("Sets Completed:", min_value=1, max_value=20, value=3)
+        with col_w2:
+            weight_val = st.number_input("Weight (kg):", min_value=0.0, max_value=500.0, value=20.0, step=2.5)
+            reps_val = st.number_input("Reps Completed:", min_value=1, max_value=100, value=10)
+            
+        rpe_val = st.slider("Intensity (RPE Scale 1-10):", min_value=5.0, max_value=10.0, value=8.5, step=0.5)
+        
+        if st.button("⚡ Save Workout Log", type="primary", use_container_width=True):
+            if ex_name:
+                w_entry = {
+                    "time": datetime.now().strftime("%I:%M %p"),
+                    "split": w_split,
+                    "exercise": ex_name.title(),
+                    "sets": int(sets_val),
+                    "reps": int(reps_val),
+                    "weight": float(weight_val),
+                    "rpe": float(rpe_val)
+                }
+                st.session_state.workout_logs.insert(0, w_entry)
+                st.success(f"Logged: {ex_name.title()} ({sets_val} sets x {reps_val} reps @ {weight_val}kg)")
+                st.rerun()
+
+        st.markdown("#### Completed Sets Today")
+        if st.session_state.workout_logs:
+            df_w_disp = pd.DataFrame(st.session_state.workout_logs)[["time", "split", "exercise", "sets", "reps", "weight", "rpe"]]
+            df_w_disp.columns = ["Time", "Split", "Exercise", "Sets", "Reps", "Weight (kg)", "RPE"]
+            st.dataframe(df_w_disp, use_container_width=True, hide_index=True)
+            if st.button("Clear Workout Logs"):
+                st.session_state.workout_logs = []
+                st.rerun()
+        else:
+            st.info("No workout logged yet today.")
+
+    with workout_tab2:
+        muscle_choice = st.radio(
+            "Select Muscle Target:",
+            ["Push (Chest / Shoulders / Triceps)", "Pull (Back / Rear Delts / Biceps)", "Legs (Quads / Hamstrings / Calves)"],
+            horizontal=True
+        )
+        st.write("---")
+        for ex in EXERCISE_DB[muscle_choice]:
+            with st.expander(f"▶ {ex['name']} ({ex['target']})", expanded=True):
+                st.markdown(
+                    f'<iframe width="100%" height="260" src="{ex["url"]}?autoplay=0&controls=1" frameborder="0" allowfullscreen></iframe>',
+                    unsafe_allow_html=True
+                )
+                st.markdown("**Form Execution Checklist:**")
+                for cue in ex["cues"]:
+                    st.markdown(f"- {cue}")
