@@ -3,8 +3,10 @@ import pandas as pd
 import json
 from datetime import datetime
 from PIL import Image
+import io
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
+from fpdf import FPDF
 
 # 1. Page Configuration & Native Mobile Theme
 st.set_page_config(
@@ -70,20 +72,21 @@ API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 # 3. Session State Initializers
 if "user_profile" not in st.session_state:
     st.session_state.user_profile = {
-        "name": "Athlete",
+        "name": "Shashank",
         "age": 28,
         "gender": "Male",
         "weight_kg": 75.0,
-        "height_cm": 168.0,
-        "activity": "Moderate (Gym 4-5 days/week)",
+        "height_cm": 158.5,
+        "activity": "Sedentary (Desk Job, minimal exercise)",
         "goal": "Recomposition (Build Muscle & Burn Fat)",
-        "target_kcal": 2100,
-        "target_p": 165,
-        "target_c": 220,
-        "target_f": 58,
-        "body_fat_pct": None,
-        "lean_mass_kg": None,
-        "fat_mass_kg": None,
+        "target_kcal": 1850,
+        "target_p": 150,
+        "target_c": 200,
+        "target_f": 50,
+        "body_fat_pct": 24.0,
+        "lean_mass_kg": 57.0,
+        "fat_mass_kg": 18.0,
+        "assessment_notes": "Physique demonstrates a strong structural base with visible muscularity in the upper back and shoulders, alongside moderate adiposity surrounding the midsection."
     }
 
 if "meal_logs" not in st.session_state:
@@ -105,7 +108,7 @@ def compute_user_macros(weight, height, age, gender, activity_str, goal_str):
         "Moderate (Gym 4-5 days/week)": 1.55,
         "Heavy (Gym 6-7 days/week, intense)": 1.725
     }
-    tdee = bmr * act_multipliers.get(activity_str, 1.55)
+    tdee = bmr * act_multipliers.get(activity_str, 1.2)
 
     if "Fat Loss" in goal_str:
         target_calories = tdee - 450
@@ -115,7 +118,7 @@ def compute_user_macros(weight, height, age, gender, activity_str, goal_str):
         protein_g = weight * 2.0
     elif "Recomposition" in goal_str:
         target_calories = tdee - 150
-        protein_g = weight * 2.2
+        protein_g = weight * 2.0
     else:
         target_calories = tdee
         protein_g = weight * 1.8
@@ -133,7 +136,7 @@ def compute_user_macros(weight, height, age, gender, activity_str, goal_str):
         "target_f": int(round(fat_g))
     }
 
-# 5. Master AI Vision & Text Engine with Nudity/Fitness Safety Bypass
+# 5. AI Vision & Text Engine
 def run_gemini_query(payload, key):
     if not key:
         st.error("❌ Gemini API Key missing from Streamlit Secrets.")
@@ -141,7 +144,6 @@ def run_gemini_query(payload, key):
 
     genai.configure(api_key=key)
     
-    # Safety overrides to prevent false-positive blocks on gym/physique photos
     safety_settings = {
         HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
         HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
@@ -249,7 +251,6 @@ def analyze_physique_ai(pil_img: Image.Image, user_prof: dict, key: str):
 
     raw_resp = run_gemini_query(payload, key)
     if not raw_resp:
-        # Fallback physiological estimation formula if vision API is blocked
         w = float(user_prof['weight_kg'])
         h = float(user_prof['height_cm'])
         bmi = w / ((h / 100) ** 2)
@@ -261,8 +262,8 @@ def analyze_physique_ai(pil_img: Image.Image, user_prof: dict, key: str):
             "estimated_body_fat_pct": est_bf,
             "lean_mass_kg": lean_kg,
             "fat_mass_kg": fat_kg,
-            "physique_assessment": f"Body composition calculated using anthropometric biometric standards (BMI: {round(bmi,1)}). Moderate subcutaneous midsection fat with strong muscle foundation.",
-            "calorie_action_plan": f"Maintain a 200-300 kcal deficit ({int(w*24)} kcal) with high protein ({int(w*2.2)}g) to lean out midsection."
+            "physique_assessment": f"Biometric estimate calculated (BMI: {round(bmi,1)}). Structural muscular foundation with moderate midsection adiposity.",
+            "calorie_action_plan": f"Target ~{int(w*25)} kcal with {int(w*2.0)}g protein."
         }
 
     try:
@@ -271,14 +272,167 @@ def analyze_physique_ai(pil_img: Image.Image, user_prof: dict, key: str):
     except Exception:
         w = float(user_prof['weight_kg'])
         return {
-            "estimated_body_fat_pct": 23.5,
-            "lean_mass_kg": round(w * 0.765, 1),
-            "fat_mass_kg": round(w * 0.235, 1),
-            "physique_assessment": "Physique shows solid shoulder and chest development with higher fat storage around lower abdomen.",
-            "calorie_action_plan": "Target 2050 kcal/day with 165g protein for recomposition."
+            "estimated_body_fat_pct": 24.0,
+            "lean_mass_kg": round(w * 0.76, 1),
+            "fat_mass_kg": round(w * 0.24, 1),
+            "physique_assessment": "Physique demonstrates solid shoulder and back development with moderate midsection storage.",
+            "calorie_action_plan": "Target 1850 kcal/day with 150g protein."
         }
 
-# 6. Global Top Navigation (Profile & Calorie Targets)
+# 6. PDF Report Generator (KSP Consulting & Solutions Branded)
+class KSPFitnessPDF(FPDF):
+    def header(self):
+        self.set_fill_color(15, 23, 42) # #0F172A Dark Slate
+        self.rect(0, 0, 210, 28, 'F')
+        self.set_text_color(59, 130, 246) # Blue
+        self.set_font("Helvetica", "B", 10)
+        self.set_xy(14, 6)
+        self.cell(0, 5, "KSP CONSULTING & SOLUTIONS", ln=True)
+        self.set_text_color(255, 255, 255)
+        self.set_font("Helvetica", "B", 14)
+        self.set_xy(14, 12)
+        self.cell(0, 6, "CONFIDENTIAL CLIENT FITNESS & METABOLIC AUDIT", ln=True)
+        self.set_text_color(148, 163, 184)
+        self.set_font("Helvetica", "I", 8)
+        self.set_xy(14, 19)
+        self.cell(0, 4, "Strategy amplified, complexity simplified.", ln=True)
+        self.ln(12)
+
+    def footer(self):
+        self.set_y(-15)
+        self.set_font("Helvetica", "I", 8)
+        self.set_text_color(148, 163, 184)
+        self.cell(0, 10, f"Page {self.page_no()} | Generated on {datetime.now().strftime('%d %B %Y, %I:%M %p')} | KSP Consulting Fitness OS", align="C")
+
+def build_pdf_report(prof, meals, workouts):
+    pdf = KSPFitnessPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=18)
+
+    # Client Biometric Card
+    pdf.set_text_color(15, 23, 42)
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 7, f"1. CLIENT BIOMETRIC & METABOLIC PROFILE ({prof['name'].upper()})", ln=True)
+    pdf.set_draw_color(59, 130, 246)
+    pdf.set_line_width(0.5)
+    pdf.line(14, pdf.get_y(), 196, pdf.get_y())
+    pdf.ln(3)
+
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(30, 41, 59)
+    
+    col_w = 45
+    pdf.cell(col_w, 6, f"Age: {prof['age']} yrs", border=1)
+    pdf.cell(col_w, 6, f"Gender: {prof['gender']}", border=1)
+    pdf.cell(col_w, 6, f"Height: {prof['height_cm']} cm", border=1)
+    pdf.cell(col_w, 6, f"Weight: {prof['weight_kg']} kg", border=1, ln=True)
+
+    bf_text = f"{prof['body_fat_pct']}%" if prof['body_fat_pct'] else "Pending Scan"
+    lean_text = f"{prof['lean_mass_kg']} kg" if prof['lean_mass_kg'] else "--"
+    fat_text = f"{prof['fat_mass_kg']} kg" if prof['fat_mass_kg'] else "--"
+
+    pdf.cell(col_w, 6, f"Body Fat: {bf_text}", border=1)
+    pdf.cell(col_w, 6, f"Lean Muscle: {lean_text}", border=1)
+    pdf.cell(col_w, 6, f"Fat Mass: {fat_text}", border=1)
+    pdf.cell(col_w, 6, f"Activity: {prof['activity'].split('(')[0].strip()}", border=1, ln=True)
+
+    pdf.ln(4)
+
+    # Scientific Target Protocol
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(0, 7, f"2. SCIENTIFIC DAILY MACRONUTRIENT TARGETS (GOAL: {prof['goal'].upper()})", ln=True)
+    pdf.line(14, pdf.get_y(), 196, pdf.get_y())
+    pdf.ln(3)
+
+    pdf.set_fill_color(241, 245, 249)
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.cell(45, 7, "Daily Calories", border=1, fill=True, align="C")
+    pdf.cell(45, 7, "Target Protein", border=1, fill=True, align="C")
+    pdf.cell(45, 7, "Target Carbs", border=1, fill=True, align="C")
+    pdf.cell(45, 7, "Target Fats", border=1, fill=True, align="C", ln=True)
+
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(45, 7, f"{prof['target_kcal']} kcal", border=1, align="C")
+    pdf.cell(45, 7, f"{prof['target_p']} g", border=1, align="C")
+    pdf.cell(45, 7, f"{prof['target_c']} g", border=1, align="C")
+    pdf.cell(45, 7, f"{prof['target_f']} g", border=1, align="C", ln=True)
+
+    pdf.ln(4)
+
+    # Meal Nutrition Ledger
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(0, 7, "3. DAILY MEAL & NUTRITION LEDGER", ln=True)
+    pdf.line(14, pdf.get_y(), 196, pdf.get_y())
+    pdf.ln(3)
+
+    pdf.set_fill_color(241, 245, 249)
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.cell(20, 6, "Time", border=1, fill=True)
+    pdf.cell(70, 6, "Food Item / Meal Description", border=1, fill=True)
+    pdf.cell(22, 6, "Protein (g)", border=1, fill=True, align="C")
+    pdf.cell(22, 6, "Carbs (g)", border=1, fill=True, align="C")
+    pdf.cell(22, 6, "Fats (g)", border=1, fill=True, align="C")
+    pdf.cell(26, 6, "Calories", border=1, fill=True, align="C", ln=True)
+
+    pdf.set_font("Helvetica", "", 8)
+    if meals:
+        for m in meals:
+            pdf.cell(20, 6, str(m.get("time", "--")), border=1)
+            pdf.cell(70, 6, str(m.get("item", "Item"))[:40], border=1)
+            pdf.cell(22, 6, f"{m.get('p', 0)}g", border=1, align="C")
+            pdf.cell(22, 6, f"{m.get('c', 0)}g", border=1, align="C")
+            pdf.cell(22, 6, f"{m.get('f', 0)}g", border=1, align="C")
+            pdf.cell(26, 6, f"{m.get('kcal', 0)} kcal", border=1, align="C", ln=True)
+    else:
+        pdf.cell(182, 6, "No meals logged for this cycle.", border=1, align="C", ln=True)
+
+    pdf.ln(4)
+
+    # Workout Training Ledger
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(0, 7, "4. STRENGTH & TRAINING PERFORMANCE LOG", ln=True)
+    pdf.line(14, pdf.get_y(), 196, pdf.get_y())
+    pdf.ln(3)
+
+    pdf.set_fill_color(241, 245, 249)
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.cell(20, 6, "Time", border=1, fill=True)
+    pdf.cell(50, 6, "Split Target", border=1, fill=True)
+    pdf.cell(50, 6, "Exercise Name", border=1, fill=True)
+    pdf.cell(20, 6, "Sets x Reps", border=1, fill=True, align="C")
+    pdf.cell(22, 6, "Weight (kg)", border=1, fill=True, align="C")
+    pdf.cell(20, 6, "RPE Intensity", border=1, fill=True, align="C", ln=True)
+
+    pdf.set_font("Helvetica", "", 8)
+    if workouts:
+        for w in workouts:
+            pdf.cell(20, 6, str(w.get("time", "--")), border=1)
+            pdf.cell(50, 6, str(w.get("split", "Split"))[:28], border=1)
+            pdf.cell(50, 6, str(w.get("exercise", "Exercise"))[:28], border=1)
+            pdf.cell(20, 6, f"{w.get('sets', 0)} x {w.get('reps', 0)}", border=1, align="C")
+            pdf.cell(22, 6, f"{w.get('weight', 0)} kg", border=1, align="C")
+            pdf.cell(20, 6, f"RPE {w.get('rpe', 0)}", border=1, align="C", ln=True)
+    else:
+        pdf.cell(182, 6, "No workouts logged for this cycle.", border=1, align="C", ln=True)
+
+    pdf.ln(4)
+
+    # AI Physiological Assessment Box
+    if prof.get("assessment_notes"):
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.set_text_color(15, 23, 42)
+        pdf.cell(0, 6, "5. AI PHYSIOLOGICAL & CONDITIONING ASSESSMENT", ln=True)
+        pdf.set_font("Helvetica", "I", 8)
+        pdf.set_text_color(71, 85, 105)
+        pdf.multi_cell(182, 5, prof["assessment_notes"], border=1)
+
+    pdf_bytes = pdf.output()
+    return bytes(pdf_bytes)
+
+# 7. Global Top Navigation (Profile & Calorie Targets)
 with st.expander("👤 User Profile & Auto-Calculated Macro Targets", expanded=False):
     col_u1, col_u2, col_u3 = st.columns(3)
     with col_u1:
@@ -289,10 +443,10 @@ with st.expander("👤 User Profile & Auto-Calculated Macro Targets", expanded=F
         u_weight = st.number_input("Weight (kg):", min_value=30.0, max_value=250.0, value=float(st.session_state.user_profile["weight_kg"]), step=0.5)
         u_height = st.number_input("Height (cm):", min_value=100.0, max_value=240.0, value=float(st.session_state.user_profile["height_cm"]), step=0.5)
         u_activity = st.selectbox("Activity Level:", [
+            "Sedentary (Desk Job, minimal exercise)",
             "Moderate (Gym 4-5 days/week)",
             "Heavy (Gym 6-7 days/week, intense)",
-            "Light (Gym 1-3 days/week)",
-            "Sedentary (Desk Job, minimal exercise)"
+            "Light (Gym 1-3 days/week)"
         ])
     with col_u3:
         u_goal = st.selectbox("Primary Fitness Goal:", [
@@ -316,7 +470,7 @@ with st.expander("👤 User Profile & Auto-Calculated Macro Targets", expanded=F
             st.success(f"Targets Updated: {new_targets['target_kcal']} kcal | {new_targets['target_p']}g Protein | {new_targets['target_c']}g Carbs | {new_targets['target_f']}g Fat")
             st.rerun()
 
-# 7. Real-Time Top Macro Ribbon
+# 8. Real-Time Top Macro Ribbon
 prof = st.session_state.user_profile
 df_meals = pd.DataFrame(st.session_state.meal_logs)
 curr_kcal = int(df_meals["kcal"].sum()) if not df_meals.empty else 0
@@ -332,12 +486,12 @@ col4.metric("Fats", f"{curr_f} g", f"Goal: {prof['target_f']}g")
 
 st.write("---")
 
-# 8. Main 2-Column Workstation
+# 9. Main 2-Column Workstation
 left_col, right_col = st.columns([1, 1], gap="large")
 
 with left_col:
     st.subheader("🥗 Smart Macro & Food Engine")
-    tab_text, tab_photo = st.tabs(["⚡ Direct Text / Voice Prompt", "📷 Plate / Label Photo Scanner"])
+    tab_text, tab_photo = st.tabs(["⚡ Direct Text / Prompt", "📷 Plate / Label Photo Scanner"])
     
     with tab_text:
         meal_input = st.text_input(
@@ -394,7 +548,8 @@ with right_col:
                         st.session_state.user_profile.update({
                             "body_fat_pct": scan.get("estimated_body_fat_pct"),
                             "lean_mass_kg": scan.get("lean_mass_kg"),
-                            "fat_mass_kg": scan.get("fat_mass_kg")
+                            "fat_mass_kg": scan.get("fat_mass_kg"),
+                            "assessment_notes": scan.get("physique_assessment", "")
                         })
                         st.success("Analysis Complete!")
                         c_bf1, c_bf2, c_bf3 = st.columns(3)
@@ -445,3 +600,25 @@ with right_col:
                 st.rerun()
         else:
             st.info("No workout sets logged yet today.")
+
+st.write("---")
+
+# 10. Client PDF Export Section
+st.subheader("📄 Client Executive Export")
+pdf_col1, pdf_col2 = st.columns([2, 1])
+with pdf_col1:
+    st.write("Generate a branded, confidential PDF summary containing the client's body composition audit, scientific macro targets, meal ledger, and completed workout sets.")
+with pdf_col2:
+    pdf_bytes = build_pdf_report(
+        st.session_state.user_profile,
+        st.session_state.meal_logs,
+        st.session_state.workout_logs
+    )
+    st.download_button(
+        label="📥 Download KSP Fitness Audit (PDF)",
+        data=pdf_bytes,
+        file_name=f"KSP_Fitness_Audit_{st.session_state.user_profile['name']}_{datetime.now().strftime('%Y%m%d')}.pdf",
+        mime="application/pdf",
+        type="primary",
+        use_container_width=True
+    )
