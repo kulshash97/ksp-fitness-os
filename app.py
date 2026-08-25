@@ -1,19 +1,20 @@
 import streamlit as st
 import pandas as pd
 import json
+import os
+import hashlib
 from datetime import datetime
 from PIL import Image
-import io
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from fpdf import FPDF
 
 # 1. Page Configuration & Native Mobile Theme
 st.set_page_config(
-    page_title="KSP Fitness OS Pro",
+    page_title="KSP Fitness OS • SaaS",
     page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 st.markdown("""
@@ -58,44 +59,69 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("""
-<div class="ksp-header">
-    <div class="ksp-brand">KSP Consulting & Solutions</div>
-    <div class="ksp-title">Fitness OS • Pro Intelligence</div>
-    <div class="ksp-tagline">Strategy amplified, complexity simplified.</div>
-</div>
-""", unsafe_allow_html=True)
-
 # 2. Key Extraction
 API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
-# 3. Session State Initializers
-if "user_profile" not in st.session_state:
-    st.session_state.user_profile = {
-        "name": "Shashank",
-        "age": 28,
-        "gender": "Male",
-        "weight_kg": 75.0,
-        "height_cm": 158.5,
-        "activity": "Sedentary (Desk Job, minimal exercise)",
-        "goal": "Recomposition (Build Muscle & Burn Fat)",
-        "target_kcal": 1850,
-        "target_p": 150,
-        "target_c": 200,
-        "target_f": 50,
-        "body_fat_pct": 24.0,
-        "lean_mass_kg": 57.0,
-        "fat_mass_kg": 18.0,
-        "assessment_notes": "Physique demonstrates a strong structural base with visible muscularity in the upper back and shoulders, alongside moderate adiposity surrounding the midsection."
-    }
+# 3. Serverless SaaS Database (Persistent JSON File Store)
+DB_FILE = "ksp_saas_database.json"
 
-if "meal_logs" not in st.session_state:
-    st.session_state.meal_logs = []
+def load_db():
+    if os.path.exists(DB_FILE):
+        try:
+            with open(DB_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            return {"users": {}}
+    return {"users": {}}
 
-if "workout_logs" not in st.session_state:
-    st.session_state.workout_logs = []
+def save_db(data):
+    with open(DB_FILE, "w") as f:
+        json.dump(data, f, indent=4)
 
-# 4. Scientific Macro Calculator (Mifflin-St Jeor)
+def hash_pw(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+# 4. Master Exercise DB
+EXERCISE_DB = {
+    "Push (Chest / Shoulders / Triceps)": [
+        {
+            "name": "Incline Dumbbell Press",
+            "target": "Upper Chest & Front Delts",
+            "url": "https://www.youtube-nocookie.com/embed/8iPEnn-ltC8",
+            "cues": ["Set bench to 30°", "Retract scapulae into pad", "Lower smoothly for 3 seconds"]
+        },
+        {
+            "name": "Flat Barbell Bench Press",
+            "target": "Mid / Lower Chest",
+            "url": "https://www.youtube-nocookie.com/embed/rT7DgCr-3pg",
+            "cues": ["Drive feet into floor", "Touch lower sternum smoothly", "Lock elbows smoothly at top"]
+        }
+    ],
+    "Pull (Back / Rear Delts / Biceps)": [
+        {
+            "name": "Chest-Supported Row",
+            "target": "Upper Back & Lats",
+            "url": "https://www.youtube-nocookie.com/embed/0UBRfiO4zDs",
+            "cues": ["Pull elbows towards hips", "Squeeze shoulder blades 1 sec", "Avoid shrugging shoulders"]
+        },
+        {
+            "name": "Lat Pulldown",
+            "target": "Latissimus Dorsi",
+            "url": "https://www.youtube-nocookie.com/embed/CAwf7n6Luuc",
+            "cues": ["Slight backward lean", "Drive elbows straight down", "Full controlled stretch at top"]
+        }
+    ],
+    "Legs (Quads / Hamstrings / Calves)": [
+        {
+            "name": "Barbell Back Squat",
+            "target": "Quads & Glutes",
+            "url": "https://www.youtube-nocookie.com/embed/bEv6CCg2BC8",
+            "cues": ["Brace core with deep belly breath", "Knees track outward", "Reach parallel depth cleanly"]
+        }
+    ]
+}
+
+# 5. Scientific Macro Calculator (Mifflin-St Jeor)
 def compute_user_macros(weight, height, age, gender, activity_str, goal_str):
     if gender == "Male":
         bmr = (10 * weight) + (6.25 * height) - (5 * age) + 5
@@ -136,14 +162,13 @@ def compute_user_macros(weight, height, age, gender, activity_str, goal_str):
         "target_f": int(round(fat_g))
     }
 
-# 5. AI Vision & Text Engine
+# 6. AI Engine with Discovery and Safety Overrides
 def run_gemini_query(payload, key):
     if not key:
         st.error("❌ Gemini API Key missing from Streamlit Secrets.")
         return None
 
     genai.configure(api_key=key)
-    
     safety_settings = {
         HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
         HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
@@ -279,12 +304,12 @@ def analyze_physique_ai(pil_img: Image.Image, user_prof: dict, key: str):
             "calorie_action_plan": "Target 1850 kcal/day with 150g protein."
         }
 
-# 6. PDF Report Generator (KSP Consulting & Solutions Branded)
+# 7. PDF Report Generator Class
 class KSPFitnessPDF(FPDF):
     def header(self):
-        self.set_fill_color(15, 23, 42) # #0F172A Dark Slate
+        self.set_fill_color(15, 23, 42)
         self.rect(0, 0, 210, 28, 'F')
-        self.set_text_color(59, 130, 246) # Blue
+        self.set_text_color(59, 130, 246)
         self.set_font("Helvetica", "B", 10)
         self.set_xy(14, 6)
         self.cell(0, 5, "KSP CONSULTING & SOLUTIONS", ln=True)
@@ -307,141 +332,221 @@ class KSPFitnessPDF(FPDF):
 def build_pdf_report(prof, meals, workouts):
     pdf = KSPFitnessPDF()
     pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=18)
+    pdf.set_auto_page_break(auto=True, margin=15)
 
-    # Client Biometric Card
     pdf.set_text_color(15, 23, 42)
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 7, f"1. CLIENT BIOMETRIC & METABOLIC PROFILE ({prof['name'].upper()})", ln=True)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(0, 6, f"1. CLIENT BIOMETRIC & METABOLIC PROFILE ({prof['name'].upper()})", ln=True)
     pdf.set_draw_color(59, 130, 246)
-    pdf.set_line_width(0.5)
+    pdf.set_line_width(0.4)
     pdf.line(14, pdf.get_y(), 196, pdf.get_y())
-    pdf.ln(3)
+    pdf.ln(2)
 
     pdf.set_font("Helvetica", "", 9)
     pdf.set_text_color(30, 41, 59)
+    col_w = 45.5
     
-    col_w = 45
-    pdf.cell(col_w, 6, f"Age: {prof['age']} yrs", border=1)
-    pdf.cell(col_w, 6, f"Gender: {prof['gender']}", border=1)
-    pdf.cell(col_w, 6, f"Height: {prof['height_cm']} cm", border=1)
-    pdf.cell(col_w, 6, f"Weight: {prof['weight_kg']} kg", border=1, ln=True)
+    pdf.cell(col_w, 6, f" Age: {prof['age']} yrs", border=1)
+    pdf.cell(col_w, 6, f" Gender: {prof['gender']}", border=1)
+    pdf.cell(col_w, 6, f" Height: {prof['height_cm']} cm", border=1)
+    pdf.cell(col_w, 6, f" Weight: {prof['weight_kg']} kg", border=1, ln=True)
 
-    bf_text = f"{prof['body_fat_pct']}%" if prof['body_fat_pct'] else "Pending Scan"
-    lean_text = f"{prof['lean_mass_kg']} kg" if prof['lean_mass_kg'] else "--"
-    fat_text = f"{prof['fat_mass_kg']} kg" if prof['fat_mass_kg'] else "--"
+    bf_text = f"{prof['body_fat_pct']}%" if prof.get('body_fat_pct') else "--"
+    lean_text = f"{prof['lean_mass_kg']} kg" if prof.get('lean_mass_kg') else "--"
+    fat_text = f"{prof['fat_mass_kg']} kg" if prof.get('fat_mass_kg') else "--"
+    act_clean = prof['activity'].split('(')[0].strip()
 
-    pdf.cell(col_w, 6, f"Body Fat: {bf_text}", border=1)
-    pdf.cell(col_w, 6, f"Lean Muscle: {lean_text}", border=1)
-    pdf.cell(col_w, 6, f"Fat Mass: {fat_text}", border=1)
-    pdf.cell(col_w, 6, f"Activity: {prof['activity'].split('(')[0].strip()}", border=1, ln=True)
-
+    pdf.cell(col_w, 6, f" Body Fat: {bf_text}", border=1)
+    pdf.cell(col_w, 6, f" Lean Mass: {lean_text}", border=1)
+    pdf.cell(col_w, 6, f" Fat Mass: {fat_text}", border=1)
+    pdf.cell(col_w, 6, f" Activity: {act_clean}", border=1, ln=True)
     pdf.ln(4)
 
-    # Scientific Target Protocol
-    pdf.set_font("Helvetica", "B", 12)
+    pdf.set_font("Helvetica", "B", 11)
     pdf.set_text_color(15, 23, 42)
-    pdf.cell(0, 7, f"2. SCIENTIFIC DAILY MACRONUTRIENT TARGETS (GOAL: {prof['goal'].upper()})", ln=True)
+    pdf.cell(0, 6, f"2. DAILY MACRONUTRIENT TARGETS -- {prof['goal'].upper()}", ln=True)
     pdf.line(14, pdf.get_y(), 196, pdf.get_y())
-    pdf.ln(3)
+    pdf.ln(2)
 
     pdf.set_fill_color(241, 245, 249)
     pdf.set_font("Helvetica", "B", 9)
-    pdf.cell(45, 7, "Daily Calories", border=1, fill=True, align="C")
-    pdf.cell(45, 7, "Target Protein", border=1, fill=True, align="C")
-    pdf.cell(45, 7, "Target Carbs", border=1, fill=True, align="C")
-    pdf.cell(45, 7, "Target Fats", border=1, fill=True, align="C", ln=True)
+    pdf.cell(col_w, 6, "Target Calories", border=1, fill=True, align="C")
+    pdf.cell(col_w, 6, "Protein (g)", border=1, fill=True, align="C")
+    pdf.cell(col_w, 6, "Carbohydrates (g)", border=1, fill=True, align="C")
+    pdf.cell(col_w, 6, "Fats (g)", border=1, fill=True, align="C", ln=True)
 
-    pdf.set_font("Helvetica", "", 10)
-    pdf.cell(45, 7, f"{prof['target_kcal']} kcal", border=1, align="C")
-    pdf.cell(45, 7, f"{prof['target_p']} g", border=1, align="C")
-    pdf.cell(45, 7, f"{prof['target_c']} g", border=1, align="C")
-    pdf.cell(45, 7, f"{prof['target_f']} g", border=1, align="C", ln=True)
-
+    pdf.set_font("Helvetica", "", 9)
+    pdf.cell(col_w, 6, f"{prof['target_kcal']} kcal", border=1, align="C")
+    pdf.cell(col_w, 6, f"{prof['target_p']} g", border=1, align="C")
+    pdf.cell(col_w, 6, f"{prof['target_c']} g", border=1, align="C")
+    pdf.cell(col_w, 6, f"{prof['target_f']} g", border=1, align="C", ln=True)
     pdf.ln(4)
 
-    # Meal Nutrition Ledger
-    pdf.set_font("Helvetica", "B", 12)
+    pdf.set_font("Helvetica", "B", 11)
     pdf.set_text_color(15, 23, 42)
-    pdf.cell(0, 7, "3. DAILY MEAL & NUTRITION LEDGER", ln=True)
+    pdf.cell(0, 6, "3. DAILY MEAL & NUTRITION LEDGER", ln=True)
     pdf.line(14, pdf.get_y(), 196, pdf.get_y())
-    pdf.ln(3)
+    pdf.ln(2)
+
+    valid_meals = [m for m in meals if m.get('kcal', 0) > 0 and "no food" not in m.get('item', '').lower()]
 
     pdf.set_fill_color(241, 245, 249)
     pdf.set_font("Helvetica", "B", 8)
     pdf.cell(20, 6, "Time", border=1, fill=True)
-    pdf.cell(70, 6, "Food Item / Meal Description", border=1, fill=True)
-    pdf.cell(22, 6, "Protein (g)", border=1, fill=True, align="C")
-    pdf.cell(22, 6, "Carbs (g)", border=1, fill=True, align="C")
-    pdf.cell(22, 6, "Fats (g)", border=1, fill=True, align="C")
-    pdf.cell(26, 6, "Calories", border=1, fill=True, align="C", ln=True)
+    pdf.cell(78, 6, "Food Item / Portion", border=1, fill=True)
+    pdf.cell(21, 6, "Protein", border=1, fill=True, align="C")
+    pdf.cell(21, 6, "Carbs", border=1, fill=True, align="C")
+    pdf.cell(21, 6, "Fats", border=1, fill=True, align="C")
+    pdf.cell(21, 6, "Calories", border=1, fill=True, align="C", ln=True)
 
     pdf.set_font("Helvetica", "", 8)
-    if meals:
-        for m in meals:
+    if valid_meals:
+        for m in valid_meals:
             pdf.cell(20, 6, str(m.get("time", "--")), border=1)
-            pdf.cell(70, 6, str(m.get("item", "Item"))[:40], border=1)
-            pdf.cell(22, 6, f"{m.get('p', 0)}g", border=1, align="C")
-            pdf.cell(22, 6, f"{m.get('c', 0)}g", border=1, align="C")
-            pdf.cell(22, 6, f"{m.get('f', 0)}g", border=1, align="C")
-            pdf.cell(26, 6, f"{m.get('kcal', 0)} kcal", border=1, align="C", ln=True)
+            pdf.cell(78, 6, str(m.get("item", "Item"))[:45], border=1)
+            pdf.cell(21, 6, f"{m.get('p', 0)}g", border=1, align="C")
+            pdf.cell(21, 6, f"{m.get('c', 0)}g", border=1, align="C")
+            pdf.cell(21, 6, f"{m.get('f', 0)}g", border=1, align="C")
+            pdf.cell(21, 6, f"{m.get('kcal', 0)} kcal", border=1, align="C", ln=True)
     else:
         pdf.cell(182, 6, "No meals logged for this cycle.", border=1, align="C", ln=True)
-
     pdf.ln(4)
 
-    # Workout Training Ledger
-    pdf.set_font("Helvetica", "B", 12)
+    pdf.set_font("Helvetica", "B", 11)
     pdf.set_text_color(15, 23, 42)
-    pdf.cell(0, 7, "4. STRENGTH & TRAINING PERFORMANCE LOG", ln=True)
+    pdf.cell(0, 6, "4. STRENGTH & TRAINING PERFORMANCE LOG", ln=True)
     pdf.line(14, pdf.get_y(), 196, pdf.get_y())
-    pdf.ln(3)
+    pdf.ln(2)
 
     pdf.set_fill_color(241, 245, 249)
     pdf.set_font("Helvetica", "B", 8)
     pdf.cell(20, 6, "Time", border=1, fill=True)
-    pdf.cell(50, 6, "Split Target", border=1, fill=True)
+    pdf.cell(48, 6, "Split Target", border=1, fill=True)
     pdf.cell(50, 6, "Exercise Name", border=1, fill=True)
-    pdf.cell(20, 6, "Sets x Reps", border=1, fill=True, align="C")
+    pdf.cell(22, 6, "Sets x Reps", border=1, fill=True, align="C")
     pdf.cell(22, 6, "Weight (kg)", border=1, fill=True, align="C")
-    pdf.cell(20, 6, "RPE Intensity", border=1, fill=True, align="C", ln=True)
+    pdf.cell(20, 6, "RPE", border=1, fill=True, align="C", ln=True)
 
     pdf.set_font("Helvetica", "", 8)
     if workouts:
         for w in workouts:
             pdf.cell(20, 6, str(w.get("time", "--")), border=1)
-            pdf.cell(50, 6, str(w.get("split", "Split"))[:28], border=1)
+            pdf.cell(48, 6, str(w.get("split", "Split"))[:26], border=1)
             pdf.cell(50, 6, str(w.get("exercise", "Exercise"))[:28], border=1)
-            pdf.cell(20, 6, f"{w.get('sets', 0)} x {w.get('reps', 0)}", border=1, align="C")
+            pdf.cell(22, 6, f"{w.get('sets', 0)} x {w.get('reps', 0)}", border=1, align="C")
             pdf.cell(22, 6, f"{w.get('weight', 0)} kg", border=1, align="C")
             pdf.cell(20, 6, f"RPE {w.get('rpe', 0)}", border=1, align="C", ln=True)
     else:
         pdf.cell(182, 6, "No workouts logged for this cycle.", border=1, align="C", ln=True)
-
     pdf.ln(4)
 
-    # AI Physiological Assessment Box
     if prof.get("assessment_notes"):
         pdf.set_font("Helvetica", "B", 10)
         pdf.set_text_color(15, 23, 42)
         pdf.cell(0, 6, "5. AI PHYSIOLOGICAL & CONDITIONING ASSESSMENT", ln=True)
         pdf.set_font("Helvetica", "I", 8)
-        pdf.set_text_color(71, 85, 105)
-        pdf.multi_cell(182, 5, prof["assessment_notes"], border=1)
+        pdf.set_text_color(51, 65, 85)
+        clean_notes = prof["assessment_notes"].replace("-29.", "29.").replace("-", "~")
+        pdf.multi_cell(182, 5, clean_notes, border=1)
 
-    pdf_bytes = pdf.output()
-    return bytes(pdf_bytes)
+    return bytes(pdf.output())
 
-# 7. Global Top Navigation (Profile & Calorie Targets)
+# 8. User Session State
+if "auth_user" not in st.session_state:
+    st.session_state.auth_user = None
+
+db = load_db()
+
+# 9. Sidebar: Multi-User SaaS Authentication
+with st.sidebar:
+    st.markdown("### ⚡ KSP SaaS Platform")
+    
+    if not st.session_state.auth_user:
+        auth_mode = st.radio("Access Mode:", ["Log In", "Sign Up (Free Beta)"])
+        
+        u_email = st.text_input("Email / Mobile:", placeholder="user@gmail.com")
+        u_pass = st.text_input("Password:", type="password")
+        
+        if auth_mode == "Sign Up (Free Beta)":
+            u_fullname = st.text_input("Full Name:", placeholder="Shashank Kulkarni")
+            if st.button("🚀 Create Free Account", type="primary", use_container_width=True):
+                if u_email and u_pass and u_fullname:
+                    if u_email in db["users"]:
+                        st.error("Account already exists. Please Log In.")
+                    else:
+                        init_targets = compute_user_macros(75.0, 168.0, 28, "Male", "Moderate (Gym 4-5 days/week)", "Recomposition (Build Muscle & Burn Fat)")
+                        db["users"][u_email] = {
+                            "name": u_fullname,
+                            "password_hash": hash_pw(u_pass),
+                            "subscription_status": "Free Beta (₹0)",
+                            "profile": {
+                                "name": u_fullname,
+                                "age": 28,
+                                "gender": "Male",
+                                "weight_kg": 75.0,
+                                "height_cm": 168.0,
+                                "activity": "Moderate (Gym 4-5 days/week)",
+                                "goal": "Recomposition (Build Muscle & Burn Fat)",
+                                "body_fat_pct": None,
+                                "lean_mass_kg": None,
+                                "fat_mass_kg": None,
+                                "assessment_notes": "",
+                                **init_targets
+                            },
+                            "meals": [],
+                            "workouts": []
+                        }
+                        save_db(db)
+                        st.session_state.auth_user = u_email
+                        st.success("Account created successfully!")
+                        st.rerun()
+                else:
+                    st.warning("Please fill in all fields.")
+        else:
+            if st.button("🔑 Log In", type="primary", use_container_width=True):
+                if u_email in db["users"] and db["users"][u_email]["password_hash"] == hash_pw(u_pass):
+                    st.session_state.auth_user = u_email
+                    st.success(f"Welcome back, {db['users'][u_email]['name']}!")
+                    st.rerun()
+                else:
+                    st.error("Invalid Email or Password.")
+    else:
+        current_data = db["users"][st.session_state.auth_user]
+        st.markdown(f"**Logged in as:** `{current_data['name']}`")
+        st.markdown(f"**Plan:** :green[{current_data.get('subscription_status', 'Free Beta')}]")
+        if st.button("Logout", use_container_width=True):
+            st.session_state.auth_user = None
+            st.rerun()
+
+# 10. Main SaaS View
+st.markdown("""
+<div class="ksp-header">
+    <div class="ksp-brand">KSP Consulting & Solutions</div>
+    <div class="ksp-title">Fitness OS • SaaS Platform</div>
+    <div class="ksp-tagline">Strategy amplified, complexity simplified.</div>
+</div>
+""", unsafe_allow_html=True)
+
+if not st.session_state.auth_user:
+    st.info("👋 Welcome to **KSP Fitness OS**. Please **Sign Up** or **Log In** from the sidebar to access your persistent tracker and AI vision engine.")
+    st.stop()
+
+# Load User Specific Records
+user_record = db["users"][st.session_state.auth_user]
+prof = user_record["profile"]
+meal_logs = user_record["meals"]
+workout_logs = user_record["workouts"]
+
+# 11. Profile Expander
 with st.expander("👤 User Profile & Auto-Calculated Macro Targets", expanded=False):
     col_u1, col_u2, col_u3 = st.columns(3)
     with col_u1:
-        u_name = st.text_input("Name:", value=st.session_state.user_profile["name"])
-        u_gender = st.selectbox("Gender:", ["Male", "Female"], index=0 if st.session_state.user_profile["gender"] == "Male" else 1)
-        u_age = st.number_input("Age (years):", min_value=12, max_value=90, value=int(st.session_state.user_profile["age"]))
+        u_name = st.text_input("Name:", value=prof["name"])
+        u_gender = st.selectbox("Gender:", ["Male", "Female"], index=0 if prof["gender"] == "Male" else 1)
+        u_age = st.number_input("Age (years):", min_value=12, max_value=90, value=int(prof["age"]))
     with col_u2:
-        u_weight = st.number_input("Weight (kg):", min_value=30.0, max_value=250.0, value=float(st.session_state.user_profile["weight_kg"]), step=0.5)
-        u_height = st.number_input("Height (cm):", min_value=100.0, max_value=240.0, value=float(st.session_state.user_profile["height_cm"]), step=0.5)
+        u_weight = st.number_input("Weight (kg):", min_value=30.0, max_value=250.0, value=float(prof["weight_kg"]), step=0.5)
+        u_height = st.number_input("Height (cm):", min_value=100.0, max_value=240.0, value=float(prof["height_cm"]), step=0.5)
         u_activity = st.selectbox("Activity Level:", [
             "Sedentary (Desk Job, minimal exercise)",
             "Moderate (Gym 4-5 days/week)",
@@ -457,7 +562,7 @@ with st.expander("👤 User Profile & Auto-Calculated Macro Targets", expanded=F
         ])
         if st.button("⚡ Recalculate Scientific Macros", type="primary", use_container_width=True):
             new_targets = compute_user_macros(u_weight, u_height, u_age, u_gender, u_activity, u_goal)
-            st.session_state.user_profile.update({
+            prof.update({
                 "name": u_name,
                 "gender": u_gender,
                 "age": u_age,
@@ -467,12 +572,12 @@ with st.expander("👤 User Profile & Auto-Calculated Macro Targets", expanded=F
                 "goal": u_goal,
                 **new_targets
             })
-            st.success(f"Targets Updated: {new_targets['target_kcal']} kcal | {new_targets['target_p']}g Protein | {new_targets['target_c']}g Carbs | {new_targets['target_f']}g Fat")
+            save_db(db)
+            st.success(f"Updated: {new_targets['target_kcal']} kcal | {new_targets['target_p']}g Protein | {new_targets['target_c']}g Carbs | {new_targets['target_f']}g Fat")
             st.rerun()
 
-# 8. Real-Time Top Macro Ribbon
-prof = st.session_state.user_profile
-df_meals = pd.DataFrame(st.session_state.meal_logs)
+# 12. Real-Time Top Macro Ribbon
+df_meals = pd.DataFrame(meal_logs)
 curr_kcal = int(df_meals["kcal"].sum()) if not df_meals.empty else 0
 curr_p = round(float(df_meals["p"].sum()), 1) if not df_meals.empty else 0.0
 curr_c = round(float(df_meals["c"].sum()), 1) if not df_meals.empty else 0.0
@@ -486,12 +591,12 @@ col4.metric("Fats", f"{curr_f} g", f"Goal: {prof['target_f']}g")
 
 st.write("---")
 
-# 9. Main 2-Column Workstation
+# 13. Main 2-Column Workstation
 left_col, right_col = st.columns([1, 1], gap="large")
 
 with left_col:
     st.subheader("🥗 Smart Macro & Food Engine")
-    tab_text, tab_photo = st.tabs(["⚡ Direct Text / Prompt", "📷 Plate / Label Photo Scanner"])
+    tab_text, tab_photo = st.tabs(["⚡ Direct Text / Voice Prompt", "📷 Plate / Label Photo Scanner"])
     
     with tab_text:
         meal_input = st.text_input(
@@ -503,7 +608,8 @@ with left_col:
                 with st.spinner("Calculating macros..."):
                     result = analyze_nutrition_ai(user_text=meal_input, key=API_KEY)
                     if result:
-                        st.session_state.meal_logs.insert(0, result)
+                        meal_logs.insert(0, result)
+                        save_db(db)
                         st.success(f"✅ Logged: {result['item']} ({result['p']}g Protein, {result['kcal']} kcal)")
                         st.rerun()
 
@@ -516,17 +622,19 @@ with left_col:
                 with st.spinner("AI Vision is inspecting portion scale & ingredients..."):
                     result = analyze_nutrition_ai(pil_img=f_img, key=API_KEY)
                     if result:
-                        st.session_state.meal_logs.insert(0, result)
+                        meal_logs.insert(0, result)
+                        save_db(db)
                         st.success(f"✅ Identified: {result['item']} ({result['p']}g Protein, {result['kcal']} kcal)")
                         st.rerun()
 
     st.markdown("#### Today's Meal Log")
-    if st.session_state.meal_logs:
-        df_meal_disp = pd.DataFrame(st.session_state.meal_logs)[["time", "item", "p", "c", "f", "kcal", "source"]]
+    if meal_logs:
+        df_meal_disp = pd.DataFrame(meal_logs)[["time", "item", "p", "c", "f", "kcal", "source"]]
         df_meal_disp.columns = ["Time", "Food Item", "Protein (g)", "Carbs (g)", "Fats (g)", "Calories (kcal)", "AI Insight"]
         st.dataframe(df_meal_disp, use_container_width=True, hide_index=True)
         if st.button("Clear Meal Log"):
-            st.session_state.meal_logs = []
+            user_record["meals"] = []
+            save_db(db)
             st.rerun()
     else:
         st.info("No meals logged yet today.")
@@ -543,14 +651,15 @@ with right_col:
             st.image(p_img, caption="Physique Upload", width=240)
             if st.button("⚡ Run Body Fat & Muscle Scan", type="primary", use_container_width=True):
                 with st.spinner("Analyzing muscular definition, abdominal conditioning, and body fat..."):
-                    scan = analyze_physique_ai(p_img, st.session_state.user_profile, API_KEY)
+                    scan = analyze_physique_ai(p_img, prof, API_KEY)
                     if scan:
-                        st.session_state.user_profile.update({
+                        prof.update({
                             "body_fat_pct": scan.get("estimated_body_fat_pct"),
                             "lean_mass_kg": scan.get("lean_mass_kg"),
                             "fat_mass_kg": scan.get("fat_mass_kg"),
                             "assessment_notes": scan.get("physique_assessment", "")
                         })
+                        save_db(db)
                         st.success("Analysis Complete!")
                         c_bf1, c_bf2, c_bf3 = st.columns(3)
                         c_bf1.metric("Body Fat %", f"{scan.get('estimated_body_fat_pct')}%")
@@ -559,8 +668,8 @@ with right_col:
                         st.info(f"**Assessment:** {scan.get('physique_assessment')}")
                         st.write(f"**Action Plan:** {scan.get('calorie_action_plan')}")
 
-        if st.session_state.user_profile["body_fat_pct"] is not None:
-            st.markdown(f"> **Current Stored Scan:** **{st.session_state.user_profile['body_fat_pct']}% Body Fat** | **{st.session_state.user_profile['lean_mass_kg']}kg Lean Mass**")
+        if prof.get("body_fat_pct") is not None:
+            st.markdown(f"> **Current Stored Scan:** **{prof['body_fat_pct']}% Body Fat** | **{prof['lean_mass_kg']}kg Lean Mass**")
 
     with tab_workout:
         st.markdown("#### Log Training Set")
@@ -586,38 +695,36 @@ with right_col:
                     "weight": float(weight_val),
                     "rpe": float(rpe_val)
                 }
-                st.session_state.workout_logs.insert(0, w_entry)
+                workout_logs.insert(0, w_entry)
+                save_db(db)
                 st.success(f"Logged: {ex_name.title()} ({sets_val}x{reps_val} @ {weight_val}kg)")
                 st.rerun()
 
         st.markdown("#### Today's Completed Sets")
-        if st.session_state.workout_logs:
-            df_w_disp = pd.DataFrame(st.session_state.workout_logs)[["time", "split", "exercise", "sets", "reps", "weight", "rpe"]]
+        if workout_logs:
+            df_w_disp = pd.DataFrame(workout_logs)[["time", "split", "exercise", "sets", "reps", "weight", "rpe"]]
             df_w_disp.columns = ["Time", "Split", "Exercise", "Sets", "Reps", "Weight (kg)", "RPE"]
             st.dataframe(df_w_disp, use_container_width=True, hide_index=True)
             if st.button("Clear Workout Logs"):
-                st.session_state.workout_logs = []
+                user_record["workouts"] = []
+                save_db(db)
                 st.rerun()
         else:
             st.info("No workout sets logged yet today.")
 
 st.write("---")
 
-# 10. Client PDF Export Section
+# 14. Client PDF Export Section
 st.subheader("📄 Client Executive Export")
 pdf_col1, pdf_col2 = st.columns([2, 1])
 with pdf_col1:
-    st.write("Generate a branded, confidential PDF summary containing the client's body composition audit, scientific macro targets, meal ledger, and completed workout sets.")
+    st.write("Generate a branded, confidential PDF summary containing your body composition audit, macro targets, meal ledger, and workout sets.")
 with pdf_col2:
-    pdf_bytes = build_pdf_report(
-        st.session_state.user_profile,
-        st.session_state.meal_logs,
-        st.session_state.workout_logs
-    )
+    pdf_bytes = build_pdf_report(prof, meal_logs, workout_logs)
     st.download_button(
         label="📥 Download KSP Fitness Audit (PDF)",
         data=pdf_bytes,
-        file_name=f"KSP_Fitness_Audit_{st.session_state.user_profile['name']}_{datetime.now().strftime('%Y%m%d')}.pdf",
+        file_name=f"KSP_Fitness_Audit_{prof['name']}_{datetime.now().strftime('%Y%m%d')}.pdf",
         mime="application/pdf",
         type="primary",
         use_container_width=True
