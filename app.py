@@ -5,7 +5,7 @@ from datetime import datetime
 from PIL import Image
 import google.generativeai as genai
 
-# 1. Page Configuration & Native Mobile Dark Theme
+# 1. Page Configuration & Native Mobile Theme
 st.set_page_config(
     page_title="KSP Fitness OS",
     page_icon="⚡",
@@ -63,7 +63,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# 2. Key Extraction (Secrets or Sidebar Fallback)
+# 2. Key Extraction
 API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
 with st.sidebar:
@@ -74,7 +74,6 @@ with st.sidebar:
     target_kcal = st.number_input("Daily Caloric Goal", value=2200, step=50)
     target_p = st.number_input("Daily Protein Goal (g)", value=140, step=5)
 
-# 3. Master Exercise Form Library
 EXERCISE_DB = {
     "Push (Chest / Shoulders / Triceps)": [
         {
@@ -114,7 +113,7 @@ EXERCISE_DB = {
     ]
 }
 
-# 4. Universal Gemini Nutrition Engine (Multi-Model Fallback)
+# 3. Dynamic Auto-Discovery Gemini Vision Engine
 def analyze_nutrition_ai(user_text: str = "", pil_img: Image.Image = None, key: str = ""):
     if not key:
         st.error("❌ Gemini API Key is missing. Please add `GEMINI_API_KEY` to your Streamlit Secrets or sidebar.")
@@ -129,21 +128,21 @@ def analyze_nutrition_ai(user_text: str = "", pil_img: Image.Image = None, key: 
     Analyze the user input (image or text description) and estimate the precise portion weight and macronutrients.
     
     GUIDELINES:
+    - If an image contains papad, sambar rice, thali, curry, roti, or bowls, identify ALL components and estimate realistic totals.
     - If an image has a kitchen scale or packaging/nutrition label, read the numbers directly via OCR.
-    - If cooked food (e.g. Soya Chunks sabzi, Paneer, Dahi, Pumpkin seeds, Dal, Rice, Rotis), calculate realistic portion grams and macros.
-    - If raw seeds/nuts (e.g. '100gm pumpkin seeds' -> ~574 kcal, ~30g protein, ~49g fat, ~15g carbs).
-    - If beverage (e.g. '1 cup tea' -> ~75 kcal, ~2g protein, ~10g carbs, ~2.5g fat).
+    - If pumpkin seeds, nuts, or raw seeds: 100g pumpkin seeds = ~574 kcal, ~30g protein, ~49g fat, ~15g carbs.
+    - If beverage: 1 cup tea = ~75 kcal, ~2g protein, ~10g carbs, ~2.5g fat.
     
     OUTPUT FORMAT:
     You MUST return STRICT JSON ONLY (no markdown blocks, no commentary):
     {
-      "food_title": "Descriptive food name and quantity",
+      "food_title": "Descriptive food name and portion",
       "portion_grams": integer,
       "calories": integer,
       "protein_grams": float,
       "carbs_grams": float,
       "fats_grams": float,
-      "ai_observation": "1-line observation"
+      "ai_observation": "1-line observation of detected items"
     }
     """
 
@@ -155,10 +154,22 @@ def analyze_nutrition_ai(user_text: str = "", pil_img: Image.Image = None, key: 
         img_resized.thumbnail((1024, 1024))
         payload.append(img_resized)
 
-    # Multi-model discovery to prevent 404 version mismatch
-    candidate_models = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-pro', 'gemini-2.0-flash']
+    # Dynamic Discovery: Try gemini-3.6-flash first, then query account's available models
     response = None
     last_err = None
+    
+    priority_models = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-1.5-flash-latest']
+    
+    # Also fetch all currently active models from the API
+    try:
+        live_models = [
+            m.name.replace('models/', '') 
+            for m in genai.list_models() 
+            if 'generateContent' in m.supported_generation_methods
+        ]
+        candidate_models = list(dict.fromkeys(priority_models + live_models))
+    except Exception:
+        candidate_models = priority_models
 
     for model_name in candidate_models:
         try:
@@ -191,14 +202,14 @@ def analyze_nutrition_ai(user_text: str = "", pil_img: Image.Image = None, key: 
         st.error(f"❌ JSON Parse Error: {parse_err}. Response: {response.text}")
         return None
 
-# 5. Session State
+# 4. Session State
 if "meal_logs" not in st.session_state:
     st.session_state.meal_logs = []
 
 if "workout_logs" not in st.session_state:
     st.session_state.workout_logs = []
 
-# 6. Top Metrics Dashboard
+# 5. Top Metrics Dashboard
 df_meals = pd.DataFrame(st.session_state.meal_logs)
 curr_kcal = int(df_meals["kcal"].sum()) if not df_meals.empty else 0
 curr_p = round(float(df_meals["p"].sum()), 1) if not df_meals.empty else 0.0
@@ -213,7 +224,7 @@ col4.metric("Fats", f"{curr_f} g")
 
 st.write("---")
 
-# 7. Two-Column Modular Layout
+# 6. Two-Column Modular Layout
 left_col, right_col = st.columns([1, 1], gap="large")
 
 with left_col:
