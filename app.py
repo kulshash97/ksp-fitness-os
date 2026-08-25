@@ -7,7 +7,7 @@ import google.generativeai as genai
 
 # 1. Page Configuration & Native Mobile Theme
 st.set_page_config(
-    page_title="KSP Fitness OS",
+    page_title="KSP Fitness OS Pro",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -58,7 +58,7 @@ st.markdown("""
 st.markdown("""
 <div class="ksp-header">
     <div class="ksp-brand">KSP Consulting & Solutions</div>
-    <div class="ksp-title">Fitness OS • Live</div>
+    <div class="ksp-title">Fitness OS • Pro Intelligence</div>
     <div class="ksp-tagline">Strategy amplified, complexity simplified.</div>
 </div>
 """, unsafe_allow_html=True)
@@ -66,75 +66,107 @@ st.markdown("""
 # 2. Key Extraction
 API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
-with st.sidebar:
-    st.markdown("### ⚙️ System Setup")
-    if not API_KEY:
-        API_KEY = st.text_input("Enter Gemini API Key:", type="password", help="Add to Streamlit Cloud secrets to bypass this.")
-    st.markdown("---")
-    target_kcal = st.number_input("Daily Caloric Goal", value=2200, step=50)
-    target_p = st.number_input("Daily Protein Goal (g)", value=140, step=5)
+# 3. Session State Initializers
+if "user_profile" not in st.session_state:
+    st.session_state.user_profile = {
+        "name": "Athlete",
+        "age": 24,
+        "gender": "Male",
+        "weight_kg": 72.0,
+        "height_cm": 175.0,
+        "activity": "Moderate (Gym 4-5 days/week)",
+        "goal": "Recomposition (Build Muscle & Burn Fat)",
+        "target_kcal": 2150,
+        "target_p": 145,
+        "target_c": 240,
+        "target_f": 55,
+        "body_fat_pct": None,
+        "lean_mass_kg": None,
+        "fat_mass_kg": None,
+    }
 
-EXERCISE_DB = {
-    "Push (Chest / Shoulders / Triceps)": [
-        {
-            "name": "Incline Dumbbell Press",
-            "target": "Upper Chest & Front Delts",
-            "url": "https://www.youtube-nocookie.com/embed/8iPEnn-ltC8",
-            "cues": ["Set bench to 30°", "Retract scapulae into the pad", "Lower smoothly for 3 seconds"]
-        },
-        {
-            "name": "Flat Barbell Bench Press",
-            "target": "Mid / Lower Chest",
-            "url": "https://www.youtube-nocookie.com/embed/rT7DgCr-3pg",
-            "cues": ["Drive feet into the floor", "Touch bar smoothly to lower sternum", "Lock elbows smoothly at top"]
-        }
-    ],
-    "Pull (Back / Rear Delts / Biceps)": [
-        {
-            "name": "Chest-Supported Row",
-            "target": "Upper Back & Lats",
-            "url": "https://www.youtube-nocookie.com/embed/0UBRfiO4zDs",
-            "cues": ["Pull elbows back toward hips", "Squeeze shoulder blades for 1 second", "Avoid shrugging shoulders"]
-        },
-        {
-            "name": "Lat Pulldown",
-            "target": "Latissimus Dorsi",
-            "url": "https://www.youtube-nocookie.com/embed/CAwf7n6Luuc",
-            "cues": ["Slight backward lean in upper chest", "Drive elbows straight down", "Full controlled stretch at top"]
-        }
-    ],
-    "Legs (Quads / Hamstrings / Calves)": [
-        {
-            "name": "Barbell Back Squat",
-            "target": "Quads & Glutes",
-            "url": "https://www.youtube-nocookie.com/embed/bEv6CCg2BC8",
-            "cues": ["Brace core with a deep belly breath", "Knees track outward with toes", "Reach parallel depth cleanly"]
-        }
-    ]
-}
+if "meal_logs" not in st.session_state:
+    st.session_state.meal_logs = []
 
-# 3. Dynamic Auto-Discovery Gemini Vision Engine
-def analyze_nutrition_ai(user_text: str = "", pil_img: Image.Image = None, key: str = ""):
+if "workout_logs" not in st.session_state:
+    st.session_state.workout_logs = []
+
+# 4. Scientific Macro Calculator (Mifflin-St Jeor)
+def compute_user_macros(weight, height, age, gender, activity_str, goal_str):
+    if gender == "Male":
+        bmr = (10 * weight) + (6.25 * height) - (5 * age) + 5
+    else:
+        bmr = (10 * weight) + (6.25 * height) - (5 * age) - 161
+
+    act_multipliers = {
+        "Sedentary (Desk Job, minimal exercise)": 1.2,
+        "Light (Gym 1-3 days/week)": 1.375,
+        "Moderate (Gym 4-5 days/week)": 1.55,
+        "Heavy (Gym 6-7 days/week, intense)": 1.725
+    }
+    tdee = bmr * act_multipliers.get(activity_str, 1.55)
+
+    if "Fat Loss" in goal_str:
+        target_calories = tdee - 450
+        protein_g = weight * 2.2
+    elif "Lean Bulk" in goal_str:
+        target_calories = tdee + 300
+        protein_g = weight * 2.0
+    elif "Recomposition" in goal_str:
+        target_calories = tdee - 150
+        protein_g = weight * 2.2
+    else:
+        target_calories = tdee
+        protein_g = weight * 1.8
+
+    fat_calories = target_calories * 0.25
+    fat_g = fat_calories / 9.0
+    protein_calories = protein_g * 4.0
+    carb_calories = max(0, target_calories - (protein_calories + fat_calories))
+    carb_g = carb_calories / 4.0
+
+    return {
+        "target_kcal": int(round(target_calories)),
+        "target_p": int(round(protein_g)),
+        "target_c": int(round(carb_g)),
+        "target_f": int(round(fat_g))
+    }
+
+# 5. Master AI Vision & Text Engine
+def run_gemini_query(payload, key):
     if not key:
-        st.error("❌ Gemini API Key is missing. Please add `GEMINI_API_KEY` to your Streamlit Secrets or sidebar.")
+        st.error("❌ Gemini API Key missing from Streamlit Secrets.")
         return None
 
     genai.configure(api_key=key)
+    candidate_models = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-1.5-flash-latest']
+    
+    try:
+        live_models = [
+            m.name.replace('models/', '') 
+            for m in genai.list_models() 
+            if 'generateContent' in m.supported_generation_methods
+        ]
+        candidate_models = list(dict.fromkeys(candidate_models + live_models))
+    except Exception:
+        pass
 
+    for model_name in candidate_models:
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(payload)
+            if response and response.text:
+                return response.text
+        except Exception:
+            continue
+    return None
+
+def analyze_nutrition_ai(user_text: str = "", pil_img: Image.Image = None, key: str = ""):
     system_prompt = """
-    You are an expert sports nutritionist and computer vision AI specialized in Indian and global diets.
+    You are an expert sports nutritionist and computer vision AI.
+    Analyze the meal input (image or text) and estimate accurate weight in grams and macronutrients.
     
-    TASK:
-    Analyze the user input (image or text description) and estimate the precise portion weight and macronutrients.
-    
-    GUIDELINES:
-    - If an image contains papad, sambar rice, thali, curry, roti, or bowls, identify ALL components and estimate realistic totals.
-    - If an image has a kitchen scale or packaging/nutrition label, read the numbers directly via OCR.
-    - If pumpkin seeds, nuts, or raw seeds: 100g pumpkin seeds = ~574 kcal, ~30g protein, ~49g fat, ~15g carbs.
-    - If beverage: 1 cup tea = ~75 kcal, ~2g protein, ~10g carbs, ~2.5g fat.
-    
-    OUTPUT FORMAT:
-    You MUST return STRICT JSON ONLY (no markdown blocks, no commentary):
+    OUTPUT STRICT JSON ONLY:
     {
       "food_title": "Descriptive food name and portion",
       "portion_grams": integer,
@@ -142,10 +174,9 @@ def analyze_nutrition_ai(user_text: str = "", pil_img: Image.Image = None, key: 
       "protein_grams": float,
       "carbs_grams": float,
       "fats_grams": float,
-      "ai_observation": "1-line observation of detected items"
+      "ai_observation": "1-line observation"
     }
     """
-
     payload = [system_prompt]
     if user_text:
         payload.append(f"Input: {user_text}")
@@ -154,39 +185,13 @@ def analyze_nutrition_ai(user_text: str = "", pil_img: Image.Image = None, key: 
         img_resized.thumbnail((1024, 1024))
         payload.append(img_resized)
 
-    # Dynamic Discovery: Try gemini-3.6-flash first, then query account's available models
-    response = None
-    last_err = None
-    
-    priority_models = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-1.5-flash-latest']
-    
-    # Also fetch all currently active models from the API
-    try:
-        live_models = [
-            m.name.replace('models/', '') 
-            for m in genai.list_models() 
-            if 'generateContent' in m.supported_generation_methods
-        ]
-        candidate_models = list(dict.fromkeys(priority_models + live_models))
-    except Exception:
-        candidate_models = priority_models
-
-    for model_name in candidate_models:
-        try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(payload)
-            if response and response.text:
-                break
-        except Exception as e:
-            last_err = e
-            continue
-
-    if not response or not response.text:
-        st.error(f"❌ AI Engine Error: {last_err}")
+    raw_resp = run_gemini_query(payload, key)
+    if not raw_resp:
+        st.error("❌ AI Engine failed to process food request.")
         return None
 
     try:
-        clean_json = response.text.replace("```json", "").replace("```", "").strip()
+        clean_json = raw_resp.replace("```json", "").replace("```", "").strip()
         data = json.loads(clean_json)
         return {
             "item": data.get("food_title", user_text or "Scanned Meal"),
@@ -198,18 +203,91 @@ def analyze_nutrition_ai(user_text: str = "", pil_img: Image.Image = None, key: 
             "source": data.get("ai_observation", "AI Verified"),
             "time": datetime.now().strftime("%I:%M %p")
         }
-    except Exception as parse_err:
-        st.error(f"❌ JSON Parse Error: {parse_err}. Response: {response.text}")
+    except Exception as e:
+        st.error(f"❌ JSON Parse Error: {e}")
         return None
 
-# 4. Session State
-if "meal_logs" not in st.session_state:
-    st.session_state.meal_logs = []
+def analyze_physique_ai(pil_img: Image.Image, user_prof: dict, key: str):
+    system_prompt = f"""
+    You are a professional body composition expert and fitness physiologist.
+    Analyze this user's physique photo.
+    User Profile Context:
+    - Gender: {user_prof['gender']}
+    - Weight: {user_prof['weight_kg']} kg
+    - Height: {user_prof['height_cm']} cm
+    - Age: {user_prof['age']} years old
+    - Goal: {user_prof['goal']}
+    
+    TASK:
+    1. Estimate visual body fat percentage based on muscular definition, vascularity, waist tightness, and abdominal visibility.
+    2. Compute estimated Lean Muscle Mass (kg) and Fat Mass (kg).
+    3. Provide tailored tactical guidance for calories and training splits.
+    
+    OUTPUT STRICT JSON ONLY:
+    {
+      "estimated_body_fat_pct": float,
+      "lean_mass_kg": float,
+      "fat_mass_kg": float,
+      "physique_assessment": "1-2 sentence honest muscularity and conditioning breakdown",
+      "calorie_action_plan": "Recommended daily adjustment"
+    }
+    """
+    img_resized = pil_img.copy()
+    img_resized.thumbnail((1024, 1024))
+    payload = [system_prompt, img_resized]
 
-if "workout_logs" not in st.session_state:
-    st.session_state.workout_logs = []
+    raw_resp = run_gemini_query(payload, key)
+    if not raw_resp:
+        st.error("❌ AI Physique Engine failed to analyze image.")
+        return None
 
-# 5. Top Metrics Dashboard
+    try:
+        clean_json = raw_resp.replace("```json", "").replace("```", "").strip()
+        return json.loads(clean_json)
+    except Exception as e:
+        st.error(f"❌ Body Scan Parse Error: {e}")
+        return None
+
+# 6. Global Top Navigation (Profile & Calorie Targets)
+with st.expander("👤 User Profile & Auto-Calculated Macro Targets", expanded=False):
+    col_u1, col_u2, col_u3 = st.columns(3)
+    with col_u1:
+        u_name = st.text_input("Name:", value=st.session_state.user_profile["name"])
+        u_gender = st.selectbox("Gender:", ["Male", "Female"], index=0 if st.session_state.user_profile["gender"] == "Male" else 1)
+        u_age = st.number_input("Age (years):", min_value=12, max_value=90, value=int(st.session_state.user_profile["age"]))
+    with col_u2:
+        u_weight = st.number_input("Weight (kg):", min_value=30.0, max_value=250.0, value=float(st.session_state.user_profile["weight_kg"]), step=0.5)
+        u_height = st.number_input("Height (cm):", min_value=100.0, max_value=240.0, value=float(st.session_state.user_profile["height_cm"]), step=0.5)
+        u_activity = st.selectbox("Activity Level:", [
+            "Moderate (Gym 4-5 days/week)",
+            "Heavy (Gym 6-7 days/week, intense)",
+            "Light (Gym 1-3 days/week)",
+            "Sedentary (Desk Job, minimal exercise)"
+        ])
+    with col_u3:
+        u_goal = st.selectbox("Primary Fitness Goal:", [
+            "Recomposition (Build Muscle & Burn Fat)",
+            "Aggressive Fat Loss (Cut)",
+            "Lean Bulk (Muscle Gain)",
+            "Maintenance & Strength"
+        ])
+        if st.button("⚡ Recalculate Scientific Macros", type="primary", use_container_width=True):
+            new_targets = compute_user_macros(u_weight, u_height, u_age, u_gender, u_activity, u_goal)
+            st.session_state.user_profile.update({
+                "name": u_name,
+                "gender": u_gender,
+                "age": u_age,
+                "weight_kg": u_weight,
+                "height_cm": u_height,
+                "activity": u_activity,
+                "goal": u_goal,
+                **new_targets
+            })
+            st.success(f"Targets Updated: {new_targets['target_kcal']} kcal | {new_targets['target_p']}g Protein | {new_targets['target_c']}g Carbs | {new_targets['target_f']}g Fat")
+            st.rerun()
+
+# 7. Real-Time Top Macro Ribbon
+prof = st.session_state.user_profile
 df_meals = pd.DataFrame(st.session_state.meal_logs)
 curr_kcal = int(df_meals["kcal"].sum()) if not df_meals.empty else 0
 curr_p = round(float(df_meals["p"].sum()), 1) if not df_meals.empty else 0.0
@@ -217,24 +295,24 @@ curr_c = round(float(df_meals["c"].sum()), 1) if not df_meals.empty else 0.0
 curr_f = round(float(df_meals["f"].sum()), 1) if not df_meals.empty else 0.0
 
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("Calories", f"{curr_kcal} kcal", f"{target_kcal - curr_kcal} rem", delta_color="inverse")
-col2.metric("Protein", f"{curr_p} g", f"{round(target_p - curr_p, 1)}g left")
-col3.metric("Carbs", f"{curr_c} g")
-col4.metric("Fats", f"{curr_f} g")
+col1.metric("Calories", f"{curr_kcal} kcal", f"{prof['target_kcal'] - curr_kcal} remaining", delta_color="inverse")
+col2.metric("Protein", f"{curr_p} g", f"{round(prof['target_p'] - curr_p, 1)}g to goal")
+col3.metric("Carbs", f"{curr_c} g", f"Goal: {prof['target_c']}g")
+col4.metric("Fats", f"{curr_f} g", f"Goal: {prof['target_f']}g")
 
 st.write("---")
 
-# 6. Two-Column Modular Layout
+# 8. Main 2-Column Workstation
 left_col, right_col = st.columns([1, 1], gap="large")
 
 with left_col:
-    st.subheader("🥗 Smart Macro Tracker")
-    tab_text, tab_photo = st.tabs(["⚡ Direct Text / Prompt", "📷 Live Photo Vision"])
+    st.subheader("🥗 Smart Macro & Food Engine")
+    tab_text, tab_photo = st.tabs(["⚡ Direct Text / Voice Prompt", "📷 Plate / Label Photo Scanner"])
     
     with tab_text:
         meal_input = st.text_input(
-            "Enter what you ate:",
-            placeholder="e.g., 100gm pumpkin seeds, 70g soya chunks with 100g dahi, 1 scoop pea protein"
+            "Enter meal with quantities:",
+            placeholder="e.g., 70g dry soya chunks with 100g curd, 100gm pumpkin seeds"
         )
         if st.button("Log Food Entry", type="primary", use_container_width=True):
             if meal_input:
@@ -246,13 +324,13 @@ with left_col:
                         st.rerun()
 
     with tab_photo:
-        uploaded_file = st.file_uploader("Upload any plate, packaged item, or kitchen scale image:", type=["jpg", "png", "jpeg"])
-        if uploaded_file:
-            img = Image.open(uploaded_file)
-            st.image(img, caption="Meal Preview", use_container_width=True)
-            if st.button("⚡ Scan & Calculate Image Macros", type="primary", use_container_width=True):
-                with st.spinner("AI Vision scanning packaging, ingredients, and portion scale..."):
-                    result = analyze_nutrition_ai(pil_img=img, key=API_KEY)
+        uploaded_food = st.file_uploader("Upload meal plate or packaged label:", type=["jpg", "png", "jpeg"], key="food_uploader")
+        if uploaded_food:
+            f_img = Image.open(uploaded_food)
+            st.image(f_img, caption="Meal Preview", use_container_width=True)
+            if st.button("⚡ Scan Meal Macros", type="primary", use_container_width=True):
+                with st.spinner("AI Vision is inspecting portion scale & ingredients..."):
+                    result = analyze_nutrition_ai(pil_img=f_img, key=API_KEY)
                     if result:
                         st.session_state.meal_logs.insert(0, result)
                         st.success(f"✅ Identified: {result['item']} ({result['p']}g Protein, {result['kcal']} kcal)")
@@ -263,28 +341,50 @@ with left_col:
         df_meal_disp = pd.DataFrame(st.session_state.meal_logs)[["time", "item", "p", "c", "f", "kcal", "source"]]
         df_meal_disp.columns = ["Time", "Food Item", "Protein (g)", "Carbs (g)", "Fats (g)", "Calories (kcal)", "AI Insight"]
         st.dataframe(df_meal_disp, use_container_width=True, hide_index=True)
-        if st.button("Clear Meals"):
+        if st.button("Clear Meal Log"):
             st.session_state.meal_logs = []
             st.rerun()
     else:
         st.info("No meals logged yet today.")
 
 with right_col:
-    st.subheader("🏋️ Workout OS & Split Tracker")
-    workout_tab1, workout_tab2 = st.tabs(["📝 Daily Workout Logger", "🎥 Form Guides & Splits"])
+    st.subheader("🏋️ Training OS & AI Body Composition")
+    tab_body, tab_workout = st.tabs(["📸 AI Physique & Body Fat Scanner", "📝 Daily Workout Log"])
     
-    with workout_tab1:
+    with tab_body:
+        st.markdown("#### Upload Mirror Physique Photo")
+        uploaded_physique = st.file_uploader("Upload full-torso front or back physique photo:", type=["jpg", "png", "jpeg"], key="body_uploader")
+        if uploaded_physique:
+            p_img = Image.open(uploaded_physique)
+            st.image(p_img, caption="Physique Upload", width=240)
+            if st.button("⚡ Run Body Fat & Muscle Scan", type="primary", use_container_width=True):
+                with st.spinner("AI is analyzing muscular definition, abdominal sharpness, and vascularity..."):
+                    scan = analyze_physique_ai(p_img, st.session_state.user_profile, API_KEY)
+                    if scan:
+                        st.session_state.user_profile.update({
+                            "body_fat_pct": scan.get("estimated_body_fat_pct"),
+                            "lean_mass_kg": scan.get("lean_mass_kg"),
+                            "fat_mass_kg": scan.get("fat_mass_kg")
+                        })
+                        st.success("Analysis Complete!")
+                        c_bf1, c_bf2, c_bf3 = st.columns(3)
+                        c_bf1.metric("Body Fat %", f"{scan.get('estimated_body_fat_pct')}%")
+                        c_bf2.metric("Lean Muscle", f"{scan.get('lean_mass_kg')} kg")
+                        c_bf3.metric("Fat Mass", f"{scan.get('fat_mass_kg')} kg")
+                        st.info(f"**Assessment:** {scan.get('physique_assessment')}")
+                        st.write(f"**Action Plan:** {scan.get('calorie_action_plan')}")
+
+        if st.session_state.user_profile["body_fat_pct"] is not None:
+            st.markdown(f"> **Current Stored Scan:** **{st.session_state.user_profile['body_fat_pct']}% Body Fat** | **{st.session_state.user_profile['lean_mass_kg']}kg Lean Mass**")
+
+    with tab_workout:
         st.markdown("#### Log Training Set")
-        w_split = st.selectbox(
-            "Split:",
-            ["Push (Chest / Shoulders / Triceps)", "Pull (Back / Rear Delts / Biceps)", "Legs (Quads / Hamstrings / Calves)", "Upper / Lower", "Full Body"]
-        )
-        
-        col_w1, col_w2 = st.columns(2)
-        with col_w1:
+        w_split = st.selectbox("Split:", ["Push (Chest/Delts/Triceps)", "Pull (Back/Biceps)", "Legs (Quads/Hamstrings)", "Upper / Lower", "Full Body"])
+        c_w1, c_w2 = st.columns(2)
+        with c_w1:
             ex_name = st.text_input("Exercise Name:", placeholder="e.g., Incline DB Press")
             sets_val = st.number_input("Sets:", min_value=1, max_value=20, value=3)
-        with col_w2:
+        with c_w2:
             weight_val = st.number_input("Weight (kg):", min_value=0.0, max_value=500.0, value=20.0, step=2.5)
             reps_val = st.number_input("Reps:", min_value=1, max_value=100, value=10)
             
@@ -302,7 +402,7 @@ with right_col:
                     "rpe": float(rpe_val)
                 }
                 st.session_state.workout_logs.insert(0, w_entry)
-                st.success(f"Logged: {ex_name.title()} ({sets_val} sets x {reps_val} reps @ {weight_val}kg)")
+                st.success(f"Logged: {ex_name.title()} ({sets_val}x{reps_val} @ {weight_val}kg)")
                 st.rerun()
 
         st.markdown("#### Today's Completed Sets")
@@ -315,20 +415,3 @@ with right_col:
                 st.rerun()
         else:
             st.info("No workout sets logged yet today.")
-
-    with workout_tab2:
-        muscle_choice = st.radio(
-            "Select Muscle Target:",
-            ["Push (Chest / Shoulders / Triceps)", "Pull (Back / Rear Delts / Biceps)", "Legs (Quads / Hamstrings / Calves)"],
-            horizontal=True
-        )
-        st.write("---")
-        for ex in EXERCISE_DB[muscle_choice]:
-            with st.expander(f"▶ {ex['name']} ({ex['target']})", expanded=True):
-                st.markdown(
-                    f'<iframe width="100%" height="260" src="{ex["url"]}?autoplay=0&controls=1" frameborder="0" allowfullscreen></iframe>',
-                    unsafe_allow_html=True
-                )
-                st.markdown("**Form Execution Checklist:**")
-                for cue in ex["cues"]:
-                    st.markdown(f"- {cue}")
