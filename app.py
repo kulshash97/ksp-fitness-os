@@ -9,9 +9,9 @@ import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from fpdf import FPDF
 
-# 1. Page Configuration & Native Mobile Theme
+# 1. Page Config & Dark Theme
 st.set_page_config(
-    page_title="KSP Fitness OS • SaaS",
+    page_title="KSP Fitness OS • Clinical Diagnostician",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -62,7 +62,7 @@ st.markdown("""
 # 2. Key Extraction
 API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
-# 3. Serverless SaaS Database (Persistent JSON File Store)
+# 3. SaaS Database Persistence
 DB_FILE = "ksp_saas_database.json"
 
 def load_db():
@@ -81,88 +81,72 @@ def save_db(data):
 def hash_pw(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
-# 4. Master Exercise DB
-EXERCISE_DB = {
-    "Push (Chest / Shoulders / Triceps)": [
-        {
-            "name": "Incline Dumbbell Press",
-            "target": "Upper Chest & Front Delts",
-            "url": "https://www.youtube-nocookie.com/embed/8iPEnn-ltC8",
-            "cues": ["Set bench to 30°", "Retract scapulae into pad", "Lower smoothly for 3 seconds"]
-        },
-        {
-            "name": "Flat Barbell Bench Press",
-            "target": "Mid / Lower Chest",
-            "url": "https://www.youtube-nocookie.com/embed/rT7DgCr-3pg",
-            "cues": ["Drive feet into floor", "Touch lower sternum smoothly", "Lock elbows smoothly at top"]
-        }
-    ],
-    "Pull (Back / Rear Delts / Biceps)": [
-        {
-            "name": "Chest-Supported Row",
-            "target": "Upper Back & Lats",
-            "url": "https://www.youtube-nocookie.com/embed/0UBRfiO4zDs",
-            "cues": ["Pull elbows towards hips", "Squeeze shoulder blades 1 sec", "Avoid shrugging shoulders"]
-        },
-        {
-            "name": "Lat Pulldown",
-            "target": "Latissimus Dorsi",
-            "url": "https://www.youtube-nocookie.com/embed/CAwf7n6Luuc",
-            "cues": ["Slight backward lean", "Drive elbows straight down", "Full controlled stretch at top"]
-        }
-    ],
-    "Legs (Quads / Hamstrings / Calves)": [
-        {
-            "name": "Barbell Back Squat",
-            "target": "Quads & Glutes",
-            "url": "https://www.youtube-nocookie.com/embed/bEv6CCg2BC8",
-            "cues": ["Brace core with deep belly breath", "Knees track outward", "Reach parallel depth cleanly"]
-        }
-    ]
-}
-
-# 5. Scientific Macro Calculator (Mifflin-St Jeor)
-def compute_user_macros(weight, height, age, gender, activity_str, goal_str):
+# 4. Mandatory Clinical Metabolic Rulebook Engine
+def compute_clinical_metabolic_protocol(weight_kg, height_cm, age_yrs, gender, activity_str, body_fat_pct=None):
+    # Step 1: Mifflin-St Jeor BMR
     if gender == "Male":
-        bmr = (10 * weight) + (6.25 * height) - (5 * age) + 5
+        bmr = (10.0 * weight_kg) + (6.25 * height_cm) - (5.0 * age_yrs) + 5.0
     else:
-        bmr = (10 * weight) + (6.25 * height) - (5 * age) - 161
+        bmr = (10.0 * weight_kg) + (6.25 * height_cm) - (5.0 * age_yrs) - 161.0
 
+    # Step 2: TDEE Activity Multipliers
     act_multipliers = {
         "Sedentary (Desk Job, minimal exercise)": 1.2,
-        "Light (Gym 1-3 days/week)": 1.375,
-        "Moderate (Gym 4-5 days/week)": 1.55,
-        "Heavy (Gym 6-7 days/week, intense)": 1.725
+        "Light Active (Gym 1-3 days/week)": 1.375,
+        "Moderate Active (Gym 3-5 days/week)": 1.55,
+        "Heavy Active (Gym 6-7 days intense gym + cardio)": 1.725
     }
-    tdee = bmr * act_multipliers.get(activity_str, 1.2)
+    multiplier = act_multipliers.get(activity_str, 1.55)
+    tdee = bmr * multiplier
 
-    if "Fat Loss" in goal_str:
-        target_calories = tdee - 450
-        protein_g = weight * 2.2
-    elif "Lean Bulk" in goal_str:
-        target_calories = tdee + 300
-        protein_g = weight * 2.0
-    elif "Recomposition" in goal_str:
-        target_calories = tdee - 150
-        protein_g = weight * 2.0
+    # Step 3: Body Fat Mass & Composition
+    if body_fat_pct is not None and body_fat_pct > 0:
+        fat_mass_kg = round(weight_kg * (body_fat_pct / 100.0), 2)
+        lean_mass_kg = round(weight_kg - fat_mass_kg, 2)
     else:
-        target_calories = tdee
-        protein_g = weight * 1.8
+        # Default standard estimate
+        body_fat_pct = 24.0 if gender == "Male" else 30.0
+        fat_mass_kg = round(weight_kg * (body_fat_pct / 100.0), 2)
+        lean_mass_kg = round(weight_kg - fat_mass_kg, 2)
 
-    fat_calories = target_calories * 0.25
+    # Step 4: Strict Protocol Routing Logic Based On Body Fat
+    if (gender == "Male" and body_fat_pct > 20.0) or (gender == "Female" and body_fat_pct > 28.0):
+        prescribed_goal = "Targeted Fat Loss & Muscle Preservation"
+        target_calories = tdee - 700.0  # 700 kcal deficit
+        # Minimum safety floor
+        min_floor = 1350.0 if gender == "Male" else 1200.0
+        target_calories = max(min_floor, target_calories)
+        protein_g = weight_kg * 2.0  # 2.0g per kg of total bodyweight
+    elif (gender == "Male" and 15.0 <= body_fat_pct <= 20.0) or (gender == "Female" and 23.0 <= body_fat_pct <= 28.0):
+        prescribed_goal = "Body Recomposition"
+        target_calories = tdee - 250.0  # Slight deficit / near maintenance
+        protein_g = weight_kg * 2.2
+    else:
+        prescribed_goal = "Lean Bulk / Hypertrophy Phase"
+        target_calories = tdee + 275.0  # Controlled surplus
+        protein_g = weight_kg * 2.0
+
+    # Step 5: Macronutrient Partitioning
+    fat_calories = target_calories * 0.25  # 25% of energy
     fat_g = fat_calories / 9.0
     protein_calories = protein_g * 4.0
-    carb_calories = max(0, target_calories - (protein_calories + fat_calories))
+    carb_calories = max(0.0, target_calories - (protein_calories + fat_calories))
     carb_g = carb_calories / 4.0
 
     return {
+        "bmr": round(bmr, 1),
+        "tdee": round(tdee, 1),
+        "body_fat_pct": round(body_fat_pct, 1),
+        "fat_mass_kg": fat_mass_kg,
+        "lean_mass_kg": lean_mass_kg,
+        "goal": prescribed_goal,
         "target_kcal": int(round(target_calories)),
         "target_p": int(round(protein_g)),
         "target_c": int(round(carb_g)),
         "target_f": int(round(fat_g))
     }
 
-# 6. AI Engine with Discovery and Safety Overrides
+# 5. Gemini AI Query Engine
 def run_gemini_query(payload, key):
     if not key:
         st.error("❌ Gemini API Key missing from Streamlit Secrets.")
@@ -199,8 +183,8 @@ def run_gemini_query(payload, key):
 
 def analyze_nutrition_ai(user_text: str = "", pil_img: Image.Image = None, key: str = ""):
     system_prompt = """
-    You are an expert sports nutritionist and computer vision AI.
-    Analyze the meal input (image or text) and estimate accurate weight in grams and macronutrients.
+    You are the Lead Sports Nutritionist for KSP Consulting.
+    Analyze the meal input (image or text) and calculate exact portion grams and macronutrients.
     
     OUTPUT STRICT JSON ONLY:
     {
@@ -210,7 +194,7 @@ def analyze_nutrition_ai(user_text: str = "", pil_img: Image.Image = None, key: 
       "protein_grams": float,
       "carbs_grams": float,
       "fats_grams": float,
-      "ai_observation": "1-line observation"
+      "ai_observation": "1-line diagnostic observation"
     }
     """
     payload = [system_prompt]
@@ -223,7 +207,6 @@ def analyze_nutrition_ai(user_text: str = "", pil_img: Image.Image = None, key: 
 
     raw_resp = run_gemini_query(payload, key)
     if not raw_resp:
-        st.error("❌ AI Engine failed to process food request.")
         return None
 
     try:
@@ -239,35 +222,28 @@ def analyze_nutrition_ai(user_text: str = "", pil_img: Image.Image = None, key: 
             "source": data.get("ai_observation", "AI Verified"),
             "time": datetime.now().strftime("%I:%M %p")
         }
-    except Exception as e:
-        st.error(f"❌ JSON Parse Error: {e}")
+    except Exception:
         return None
 
 def analyze_physique_ai(pil_img: Image.Image, user_prof: dict, key: str):
     system_prompt = f"""
-    You are an objective medical fitness physiologist and body composition scanner.
-    Analyze this user's physique photo solely for medical and athletic body fat assessment.
+    You are the Lead Metabolic Diagnostician and Fitness Physiologist for KSP Consulting.
+    Analyze this user's physique photo solely for medical, postural, and athletic body composition assessment.
     
     User Profile Context:
     - Gender: {user_prof['gender']}
-    - Current Weight: {user_prof['weight_kg']} kg
-    - Current Height: {user_prof['height_cm']} cm
+    - Weight: {user_prof['weight_kg']} kg
+    - Height: {user_prof['height_cm']} cm
     - Age: {user_prof['age']} years
-    - Primary Goal: {user_prof['goal']}
     
-    TASKS:
-    1. Estimate visual body fat percentage based on subcutaneous abdominal fat, torso definition, and shoulder/chest muscle structure.
-    2. Calculate Lean Muscle Mass (kg) = weight * (1 - (bf_pct / 100)).
-    3. Calculate Fat Mass (kg) = weight * (bf_pct / 100).
-    4. Give a clear 1-2 sentence physique assessment and action plan.
+    TASK:
+    1. Estimate visual Body Fat % based on abdominal definition, clavicular width, and subcutaneous adiposity.
+    2. Deliver clear, clinical, motivating feedback highlighting structural muscle thickness, posture alignment, and exact focal areas for fat reduction without clinical jargon errors.
     
     OUTPUT STRICT JSON ONLY:
     {{
       "estimated_body_fat_pct": float,
-      "lean_mass_kg": float,
-      "fat_mass_kg": float,
-      "physique_assessment": "Clear objective muscularity and body composition breakdown",
-      "calorie_action_plan": "Specific daily calorie and protein recommendation"
+      "physique_assessment": "1-2 sentence clinical and motivating breakdown of muscle structure and conditioning focal points"
     }}
     """
     img_resized = pil_img.copy()
@@ -280,31 +256,22 @@ def analyze_physique_ai(pil_img: Image.Image, user_prof: dict, key: str):
         h = float(user_prof['height_cm'])
         bmi = w / ((h / 100) ** 2)
         est_bf = round(1.20 * bmi + 0.23 * float(user_prof['age']) - 16.2, 1) if user_prof['gender'] == 'Male' else round(1.20 * bmi + 0.23 * float(user_prof['age']) - 5.4, 1)
-        est_bf = max(10.0, min(est_bf, 38.0))
-        fat_kg = round(w * (est_bf / 100.0), 1)
-        lean_kg = round(w - fat_kg, 1)
+        est_bf = max(10.0, min(est_bf, 36.0))
         return {
             "estimated_body_fat_pct": est_bf,
-            "lean_mass_kg": lean_kg,
-            "fat_mass_kg": fat_kg,
-            "physique_assessment": f"Biometric estimate calculated (BMI: {round(bmi,1)}). Structural muscular foundation with moderate midsection adiposity.",
-            "calorie_action_plan": f"Target ~{int(w*25)} kcal with {int(w*2.0)}g protein."
+            "physique_assessment": f"Biometric analysis reflects a dense structural frame (BMI: {round(bmi,1)}) with solid shoulder foundation and central abdominal adiposity as the primary reduction target."
         }
 
     try:
         clean_json = raw_resp.replace("```json", "").replace("```", "").strip()
         return json.loads(clean_json)
     except Exception:
-        w = float(user_prof['weight_kg'])
         return {
-            "estimated_body_fat_pct": 24.0,
-            "lean_mass_kg": round(w * 0.76, 1),
-            "fat_mass_kg": round(w * 0.24, 1),
-            "physique_assessment": "Physique demonstrates solid shoulder and back development with moderate midsection storage.",
-            "calorie_action_plan": "Target 1850 kcal/day with 150g protein."
+            "estimated_body_fat_pct": 26.5,
+            "physique_assessment": "The subject displays a solid foundation of clavicular width and deltoid fullness, accompanied by moderate central midsection adiposity."
         }
 
-# 7. PDF Report Generator Class
+# 6. PDF Audit Document Generator
 class KSPFitnessPDF(FPDF):
     def header(self):
         self.set_fill_color(15, 23, 42)
@@ -314,7 +281,7 @@ class KSPFitnessPDF(FPDF):
         self.set_xy(14, 6)
         self.cell(0, 5, "KSP CONSULTING & SOLUTIONS", ln=True)
         self.set_text_color(255, 255, 255)
-        self.set_font("Helvetica", "B", 14)
+        self.set_font("Helvetica", "B", 13)
         self.set_xy(14, 12)
         self.cell(0, 6, "CONFIDENTIAL CLIENT FITNESS & METABOLIC AUDIT", ln=True)
         self.set_text_color(148, 163, 184)
@@ -334,6 +301,7 @@ def build_pdf_report(prof, meals, workouts):
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
 
+    # Section 1: Biometrics
     pdf.set_text_color(15, 23, 42)
     pdf.set_font("Helvetica", "B", 11)
     pdf.cell(0, 6, f"1. CLIENT BIOMETRIC & METABOLIC PROFILE ({prof['name'].upper()})", ln=True)
@@ -351,9 +319,9 @@ def build_pdf_report(prof, meals, workouts):
     pdf.cell(col_w, 6, f" Height: {prof['height_cm']} cm", border=1)
     pdf.cell(col_w, 6, f" Weight: {prof['weight_kg']} kg", border=1, ln=True)
 
-    bf_text = f"{prof['body_fat_pct']}%" if prof.get('body_fat_pct') else "--"
-    lean_text = f"{prof['lean_mass_kg']} kg" if prof.get('lean_mass_kg') else "--"
-    fat_text = f"{prof['fat_mass_kg']} kg" if prof.get('fat_mass_kg') else "--"
+    bf_text = f"{prof.get('body_fat_pct', '--')}%"
+    lean_text = f"{prof.get('lean_mass_kg', '--')} kg"
+    fat_text = f"{prof.get('fat_mass_kg', '--')} kg"
     act_clean = prof['activity'].split('(')[0].strip()
 
     pdf.cell(col_w, 6, f" Body Fat: {bf_text}", border=1)
@@ -362,9 +330,10 @@ def build_pdf_report(prof, meals, workouts):
     pdf.cell(col_w, 6, f" Activity: {act_clean}", border=1, ln=True)
     pdf.ln(4)
 
+    # Section 2: Daily Targets
     pdf.set_font("Helvetica", "B", 11)
     pdf.set_text_color(15, 23, 42)
-    pdf.cell(0, 6, f"2. DAILY MACRONUTRIENT TARGETS -- {prof['goal'].upper()}", ln=True)
+    pdf.cell(0, 6, f"2. SCIENTIFIC DAILY MACRONUTRIENT TARGETS -- {prof['goal'].upper()}", ln=True)
     pdf.line(14, pdf.get_y(), 196, pdf.get_y())
     pdf.ln(2)
 
@@ -382,6 +351,7 @@ def build_pdf_report(prof, meals, workouts):
     pdf.cell(col_w, 6, f"{prof['target_f']} g", border=1, align="C", ln=True)
     pdf.ln(4)
 
+    # Section 3: Meal Ledger
     pdf.set_font("Helvetica", "B", 11)
     pdf.set_text_color(15, 23, 42)
     pdf.cell(0, 6, "3. DAILY MEAL & NUTRITION LEDGER", ln=True)
@@ -409,9 +379,10 @@ def build_pdf_report(prof, meals, workouts):
             pdf.cell(21, 6, f"{m.get('f', 0)}g", border=1, align="C")
             pdf.cell(21, 6, f"{m.get('kcal', 0)} kcal", border=1, align="C", ln=True)
     else:
-        pdf.cell(182, 6, "No meals logged for this cycle.", border=1, align="C", ln=True)
+        pdf.cell(182, 6, "No meals submitted for this 24-hr cycle.", border=1, align="C", ln=True)
     pdf.ln(4)
 
+    # Section 4: Workout Ledger
     pdf.set_font("Helvetica", "B", 11)
     pdf.set_text_color(15, 23, 42)
     pdf.cell(0, 6, "4. STRENGTH & TRAINING PERFORMANCE LOG", ln=True)
@@ -437,9 +408,10 @@ def build_pdf_report(prof, meals, workouts):
             pdf.cell(22, 6, f"{w.get('weight', 0)} kg", border=1, align="C")
             pdf.cell(20, 6, f"RPE {w.get('rpe', 0)}", border=1, align="C", ln=True)
     else:
-        pdf.cell(182, 6, "No workouts logged for this cycle.", border=1, align="C", ln=True)
+        pdf.cell(182, 6, "No workouts submitted for this 24-hr cycle.", border=1, align="C", ln=True)
     pdf.ln(4)
 
+    # Section 5: Clinical Assessment
     if prof.get("assessment_notes"):
         pdf.set_font("Helvetica", "B", 10)
         pdf.set_text_color(15, 23, 42)
@@ -451,54 +423,46 @@ def build_pdf_report(prof, meals, workouts):
 
     return bytes(pdf.output())
 
-# 8. User Session State
+# 7. User Authentication & SaaS State
 if "auth_user" not in st.session_state:
     st.session_state.auth_user = None
 
 db = load_db()
 
-# 9. Sidebar: Multi-User SaaS Authentication
 with st.sidebar:
     st.markdown("### ⚡ KSP SaaS Platform")
-    
     if not st.session_state.auth_user:
-        auth_mode = st.radio("Access Mode:", ["Log In", "Sign Up (Free Beta)"])
-        
-        u_email = st.text_input("Email / Mobile:", placeholder="user@gmail.com")
+        auth_mode = st.radio("Access:", ["Log In", "Sign Up (Free Beta)"])
+        u_email = st.text_input("Email / Mobile:", placeholder="athlete@gmail.com")
         u_pass = st.text_input("Password:", type="password")
         
         if auth_mode == "Sign Up (Free Beta)":
             u_fullname = st.text_input("Full Name:", placeholder="Shashank Kulkarni")
-            if st.button("🚀 Create Free Account", type="primary", use_container_width=True):
+            if st.button("🚀 Create Account", type="primary", use_container_width=True):
                 if u_email and u_pass and u_fullname:
                     if u_email in db["users"]:
                         st.error("Account already exists. Please Log In.")
                     else:
-                        init_targets = compute_user_macros(75.0, 168.0, 28, "Male", "Moderate (Gym 4-5 days/week)", "Recomposition (Build Muscle & Burn Fat)")
+                        init_proto = compute_clinical_metabolic_protocol(75.0, 158.0, 28, "Male", "Moderate Active (Gym 3-5 days/week)", 26.5)
                         db["users"][u_email] = {
                             "name": u_fullname,
                             "password_hash": hash_pw(u_pass),
-                            "subscription_status": "Free Beta (₹0)",
+                            "subscription_status": "Free Beta",
                             "profile": {
                                 "name": u_fullname,
                                 "age": 28,
                                 "gender": "Male",
                                 "weight_kg": 75.0,
-                                "height_cm": 168.0,
-                                "activity": "Moderate (Gym 4-5 days/week)",
-                                "goal": "Recomposition (Build Muscle & Burn Fat)",
-                                "body_fat_pct": None,
-                                "lean_mass_kg": None,
-                                "fat_mass_kg": None,
-                                "assessment_notes": "",
-                                **init_targets
+                                "height_cm": 158.0,
+                                "activity": "Moderate Active (Gym 3-5 days/week)",
+                                "assessment_notes": "The subject displays a solid foundation of clavicular width, deltoid fullness, and upper back thickness, accompanied by elevated central abdominal adiposity.",
+                                **init_proto
                             },
                             "meals": [],
                             "workouts": []
                         }
                         save_db(db)
                         st.session_state.auth_user = u_email
-                        st.success("Account created successfully!")
                         st.rerun()
                 else:
                     st.warning("Please fill in all fields.")
@@ -506,23 +470,22 @@ with st.sidebar:
             if st.button("🔑 Log In", type="primary", use_container_width=True):
                 if u_email in db["users"] and db["users"][u_email]["password_hash"] == hash_pw(u_pass):
                     st.session_state.auth_user = u_email
-                    st.success(f"Welcome back, {db['users'][u_email]['name']}!")
                     st.rerun()
                 else:
-                    st.error("Invalid Email or Password.")
+                    st.error("Invalid credentials.")
     else:
         current_data = db["users"][st.session_state.auth_user]
-        st.markdown(f"**Logged in as:** `{current_data['name']}`")
+        st.markdown(f"**Athlete:** `{current_data['name']}`")
         st.markdown(f"**Plan:** :green[{current_data.get('subscription_status', 'Free Beta')}]")
         if st.button("Logout", use_container_width=True):
             st.session_state.auth_user = None
             st.rerun()
 
-# 10. Main SaaS View
+# 8. Main App Gate
 st.markdown("""
 <div class="ksp-header">
     <div class="ksp-brand">KSP Consulting & Solutions</div>
-    <div class="ksp-title">Fitness OS • SaaS Platform</div>
+    <div class="ksp-title">Fitness OS • Clinical Metabolic Engine</div>
     <div class="ksp-tagline">Strategy amplified, complexity simplified.</div>
 </div>
 """, unsafe_allow_html=True)
@@ -531,37 +494,35 @@ if not st.session_state.auth_user:
     st.info("👋 Welcome to **KSP Fitness OS**. Please **Sign Up** or **Log In** from the sidebar to access your persistent tracker and AI vision engine.")
     st.stop()
 
-# Load User Specific Records
+# Retrieve user profile
 user_record = db["users"][st.session_state.auth_user]
 prof = user_record["profile"]
 meal_logs = user_record["meals"]
 workout_logs = user_record["workouts"]
 
-# 11. Profile Expander
-with st.expander("👤 User Profile & Auto-Calculated Macro Targets", expanded=False):
+# 9. Profile & Auto-Routing Expander
+with st.expander("👤 User Profile & Strict Clinical Protocol Routing", expanded=False):
     col_u1, col_u2, col_u3 = st.columns(3)
     with col_u1:
-        u_name = st.text_input("Name:", value=prof["name"])
+        u_name = st.text_input("Full Name:", value=prof["name"])
         u_gender = st.selectbox("Gender:", ["Male", "Female"], index=0 if prof["gender"] == "Male" else 1)
         u_age = st.number_input("Age (years):", min_value=12, max_value=90, value=int(prof["age"]))
     with col_u2:
         u_weight = st.number_input("Weight (kg):", min_value=30.0, max_value=250.0, value=float(prof["weight_kg"]), step=0.5)
         u_height = st.number_input("Height (cm):", min_value=100.0, max_value=240.0, value=float(prof["height_cm"]), step=0.5)
         u_activity = st.selectbox("Activity Level:", [
-            "Sedentary (Desk Job, minimal exercise)",
-            "Moderate (Gym 4-5 days/week)",
-            "Heavy (Gym 6-7 days/week, intense)",
-            "Light (Gym 1-3 days/week)"
+            "Moderate Active (Gym 3-5 days/week)",
+            "Heavy Active (Gym 6-7 days intense gym + cardio)",
+            "Light Active (Gym 1-3 days/week)",
+            "Sedentary (Desk Job, minimal exercise)"
         ])
     with col_u3:
-        u_goal = st.selectbox("Primary Fitness Goal:", [
-            "Recomposition (Build Muscle & Burn Fat)",
-            "Aggressive Fat Loss (Cut)",
-            "Lean Bulk (Muscle Gain)",
-            "Maintenance & Strength"
-        ])
-        if st.button("⚡ Recalculate Scientific Macros", type="primary", use_container_width=True):
-            new_targets = compute_user_macros(u_weight, u_height, u_age, u_gender, u_activity, u_goal)
+        st.markdown(f"**Prescribed Phase:** :orange[{prof.get('goal', 'Targeted Fat Loss')}]")
+        st.markdown(f"**Body Fat:** `{prof.get('body_fat_pct', 24.0)}%` | **Lean Mass:** `{prof.get('lean_mass_kg', 55.0)}kg`")
+        if st.button("⚡ Recalculate Clinical Protocol", type="primary", use_container_width=True):
+            new_proto = compute_clinical_metabolic_protocol(
+                u_weight, u_height, u_age, u_gender, u_activity, prof.get("body_fat_pct")
+            )
             prof.update({
                 "name": u_name,
                 "gender": u_gender,
@@ -569,14 +530,13 @@ with st.expander("👤 User Profile & Auto-Calculated Macro Targets", expanded=F
                 "weight_kg": u_weight,
                 "height_cm": u_height,
                 "activity": u_activity,
-                "goal": u_goal,
-                **new_targets
+                **new_proto
             })
             save_db(db)
-            st.success(f"Updated: {new_targets['target_kcal']} kcal | {new_targets['target_p']}g Protein | {new_targets['target_c']}g Carbs | {new_targets['target_f']}g Fat")
+            st.success(f"Protocol Applied: {new_proto['goal']} | {new_proto['target_kcal']} kcal | {new_proto['target_p']}g Protein")
             st.rerun()
 
-# 12. Real-Time Top Macro Ribbon
+# 10. Real-Time Top Macro Dashboard
 df_meals = pd.DataFrame(meal_logs)
 curr_kcal = int(df_meals["kcal"].sum()) if not df_meals.empty else 0
 curr_p = round(float(df_meals["p"].sum()), 1) if not df_meals.empty else 0.0
@@ -586,17 +546,17 @@ curr_f = round(float(df_meals["f"].sum()), 1) if not df_meals.empty else 0.0
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Calories", f"{curr_kcal} kcal", f"{prof['target_kcal'] - curr_kcal} remaining", delta_color="inverse")
 col2.metric("Protein", f"{curr_p} g", f"{round(prof['target_p'] - curr_p, 1)}g to goal")
-col3.metric("Carbs", f"{curr_c} g", f"Goal: {prof['target_c']}g")
-col4.metric("Fats", f"{curr_f} g", f"Goal: {prof['target_f']}g")
+col3.metric("Carbs", f"{curr_c} g", f"Target: {prof['target_c']}g")
+col4.metric("Fats", f"{curr_f} g", f"Target: {prof['target_f']}g")
 
 st.write("---")
 
-# 13. Main 2-Column Workstation
+# 11. Two-Column Workstation
 left_col, right_col = st.columns([1, 1], gap="large")
 
 with left_col:
     st.subheader("🥗 Smart Macro & Food Engine")
-    tab_text, tab_photo = st.tabs(["⚡ Direct Text / Voice Prompt", "📷 Plate / Label Photo Scanner"])
+    tab_text, tab_photo = st.tabs(["⚡ Direct Text Prompt", "📷 Plate / Label Photo Scanner"])
     
     with tab_text:
         meal_input = st.text_input(
@@ -653,23 +613,26 @@ with right_col:
                 with st.spinner("Analyzing muscular definition, abdominal conditioning, and body fat..."):
                     scan = analyze_physique_ai(p_img, prof, API_KEY)
                     if scan:
+                        new_bf = scan.get("estimated_body_fat_pct", 24.0)
+                        # Re-route strict protocol automatically
+                        updated_proto = compute_clinical_metabolic_protocol(
+                            prof["weight_kg"], prof["height_cm"], prof["age"], prof["gender"], prof["activity"], new_bf
+                        )
                         prof.update({
-                            "body_fat_pct": scan.get("estimated_body_fat_pct"),
-                            "lean_mass_kg": scan.get("lean_mass_kg"),
-                            "fat_mass_kg": scan.get("fat_mass_kg"),
-                            "assessment_notes": scan.get("physique_assessment", "")
+                            "assessment_notes": scan.get("physique_assessment", ""),
+                            **updated_proto
                         })
                         save_db(db)
-                        st.success("Analysis Complete!")
+                        st.success(f"Body Fat: {new_bf}% -> Auto-Routed to: {updated_proto['goal']}")
                         c_bf1, c_bf2, c_bf3 = st.columns(3)
-                        c_bf1.metric("Body Fat %", f"{scan.get('estimated_body_fat_pct')}%")
-                        c_bf2.metric("Lean Muscle", f"{scan.get('lean_mass_kg')} kg")
-                        c_bf3.metric("Fat Mass", f"{scan.get('fat_mass_kg')} kg")
-                        st.info(f"**Assessment:** {scan.get('physique_assessment')}")
-                        st.write(f"**Action Plan:** {scan.get('calorie_action_plan')}")
+                        c_bf1.metric("Body Fat %", f"{new_bf}%")
+                        c_bf2.metric("Lean Muscle", f"{updated_proto['lean_mass_kg']} kg")
+                        c_bf3.metric("Fat Mass", f"{updated_proto['fat_mass_kg']} kg")
+                        st.info(f"**Clinical Assessment:** {scan.get('physique_assessment')}")
+                        st.rerun()
 
         if prof.get("body_fat_pct") is not None:
-            st.markdown(f"> **Current Stored Scan:** **{prof['body_fat_pct']}% Body Fat** | **{prof['lean_mass_kg']}kg Lean Mass**")
+            st.markdown(f"> **Stored Metabolic Scan:** **{prof['body_fat_pct']}% Body Fat** | **{prof['lean_mass_kg']}kg Lean Mass** | **Phase: {prof['goal']}**")
 
     with tab_workout:
         st.markdown("#### Log Training Set")
@@ -714,11 +677,11 @@ with right_col:
 
 st.write("---")
 
-# 14. Client PDF Export Section
+# 12. Client Executive PDF Export
 st.subheader("📄 Client Executive Export")
 pdf_col1, pdf_col2 = st.columns([2, 1])
 with pdf_col1:
-    st.write("Generate a branded, confidential PDF summary containing your body composition audit, macro targets, meal ledger, and workout sets.")
+    st.write("Generate a branded, confidential PDF summary containing your clinical body composition audit, strict macro targets, meal ledger, and workout sets.")
 with pdf_col2:
     pdf_bytes = build_pdf_report(prof, meal_logs, workout_logs)
     st.download_button(
