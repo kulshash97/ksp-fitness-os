@@ -81,7 +81,6 @@ def hash_pw(password):
 
 # 3. Clinical Metabolic Engine (Mifflin-St Jeor & Katch-McArdle)
 def compute_clinical_metabolic_protocol(weight_kg, height_cm, age_yrs, gender, activity_str, body_fat_pct=None, lean_mass_kg=None):
-    # If exact lean mass is known from InBody, use Katch-McArdle
     if lean_mass_kg is not None and lean_mass_kg > 0:
         bmr = 370.0 + (21.6 * lean_mass_kg)
     else:
@@ -107,7 +106,6 @@ def compute_clinical_metabolic_protocol(weight_kg, height_cm, age_yrs, gender, a
         fat_mass = round(weight_kg * (body_fat_pct / 100.0), 2)
         lean_mass = round(weight_kg - fat_mass, 2)
 
-    # Mandatory routing rules
     if (gender == "Male" and body_fat_pct > 20.0) or (gender == "Female" and body_fat_pct > 28.0):
         prescribed_goal = "Targeted Fat Loss & Muscle Preservation"
         target_calories = tdee - 700.0
@@ -287,7 +285,9 @@ def analyze_physique_ai(pil_img: Image.Image, user_prof: dict, key: str):
             "physique_assessment": "The subject displays a solid foundation of clavicular width and deltoid fullness, accompanied by moderate central midsection adiposity."
         }
 
-# 5. PDF Generation Class
+# 5. PDF Generation Engines
+
+# Engine A: Personal Client Fitness & Metabolic Audit
 class KSPFitnessPDF(FPDF):
     def header(self):
         self.set_fill_color(15, 23, 42)
@@ -344,7 +344,6 @@ def build_pdf_report(prof, meals, workouts):
     pdf.cell(col_w, 6, f" Fat Mass: {fat_text}", border=1)
     pdf.cell(col_w, 6, f" Muscle (SMM): {smm_text}", border=1, ln=True)
 
-    # InBody Metrics Row (if available)
     if prof.get("visceral_fat_level") or prof.get("inbody_score"):
         v_level = f"Level {prof.get('visceral_fat_level')}" if prof.get('visceral_fat_level') else "--"
         score_val = f"{prof.get('inbody_score')}/100" if prof.get('inbody_score') else "--"
@@ -445,6 +444,124 @@ def build_pdf_report(prof, meals, workouts):
 
     return bytes(pdf.output())
 
+# Engine B: Platform Overview & Commercial Pitch Deck PDF
+class KSPDeckPDF(FPDF):
+    def header(self):
+        self.set_fill_color(15, 23, 42)
+        self.rect(0, 0, 210, 28, 'F')
+        self.set_text_color(59, 130, 246)
+        self.set_font("Helvetica", "B", 10)
+        self.set_xy(14, 6)
+        self.cell(0, 5, "KSP CONSULTING & SOLUTIONS", ln=True)
+        self.set_text_color(255, 255, 255)
+        self.set_font("Helvetica", "B", 13)
+        self.set_xy(14, 12)
+        self.cell(0, 6, "FITNESS OS -- PLATFORM OVERVIEW & POSITIONING DECK", ln=True)
+        self.set_text_color(148, 163, 184)
+        self.set_font("Helvetica", "I", 8)
+        self.set_xy(14, 19)
+        self.cell(0, 4, "Strategy amplified, complexity simplified.", ln=True)
+        self.ln(12)
+
+    def footer(self):
+        self.set_y(-15)
+        self.set_font("Helvetica", "I", 8)
+        self.set_text_color(148, 163, 184)
+        self.cell(0, 10, f"Page {self.page_no()} | KSP Fitness OS Commercial Brief | Confidentially Distributed", align="C")
+
+def generate_positioning_pdf_bytes():
+    pdf = KSPDeckPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(0, 6, "1. THE PROBLEM IN MODERN FITNESS TRACKING", ln=True)
+    pdf.set_draw_color(59, 130, 246)
+    pdf.set_line_width(0.4)
+    pdf.line(14, pdf.get_y(), 196, pdf.get_y())
+    pdf.ln(2)
+
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(51, 65, 85)
+    pdf.multi_cell(182, 5, 
+        "Traditional fitness applications fail Indian lifters in three critical areas:\n"
+        "1. Inaccurate Indian Macro Data: Standard apps miscalculate regional cooked dishes and staple vegetarian sources (soya chunks, paneer, dals, curd).\n"
+        "2. Manual Logging Friction: Typing food weights and searching databases leads to 80% user drop-off within 14 days.\n"
+        "3. Lack of True Clinical Logic: Generic apps allow individuals with >25% body fat to enter dangerous 'bulking' phases instead of enforcing fat-loss protocols."
+    )
+    pdf.ln(3)
+
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(0, 6, "2. THE KSP FITNESS OS SOLUTION ARCHITECTURE", ln=True)
+    pdf.line(14, pdf.get_y(), 196, pdf.get_y())
+    pdf.ln(2)
+
+    pdf.set_fill_color(241, 245, 249)
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.cell(50, 6, "Core Module", border=1, fill=True)
+    pdf.cell(132, 6, "Engine Capability & User Advantage", border=1, fill=True, ln=True)
+
+    pdf.set_font("Helvetica", "", 8)
+    pdf.cell(50, 6, "InBody / DEXA OCR Scanner", border=1)
+    pdf.cell(132, 6, "Extracts SMM, PBF, Visceral Fat & uses Katch-McArdle for 100% BMR precision.", border=1, ln=True)
+
+    pdf.cell(50, 6, "AI Physique Mirror Vision", border=1)
+    pdf.cell(132, 6, "Estimates visual body fat with clothing-occlusion heuristics for users without scans.", border=1, ln=True)
+
+    pdf.cell(50, 6, "Smart Macro Vision Tracker", border=1)
+    pdf.cell(132, 6, "Snaps cooked plates or scale readings; computes exact protein/carb/fat splits instantly.", border=1, ln=True)
+
+    pdf.cell(50, 6, "Clinical Protocol Guardrail", border=1)
+    pdf.cell(132, 6, "Mandatory routing: Male BF >20% locks into targeted fat loss (700 kcal deficit).", border=1, ln=True)
+
+    pdf.cell(50, 6, "Executive Client PDF Audit", border=1)
+    pdf.cell(132, 6, "Exports clinical diagnostic sheets under the KSP Consulting brand.", border=1, ln=True)
+    pdf.ln(3)
+
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(0, 6, "3. COMMERCIAL POSITIONING & SUBSCRIPTION MODEL", ln=True)
+    pdf.line(14, pdf.get_y(), 196, pdf.get_y())
+    pdf.ln(2)
+
+    pdf.set_fill_color(241, 245, 249)
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.cell(40, 6, "Tier", border=1, fill=True)
+    pdf.cell(35, 6, "Pricing", border=1, fill=True)
+    pdf.cell(107, 6, "Deliverables", border=1, fill=True, ln=True)
+
+    pdf.set_font("Helvetica", "", 8)
+    pdf.cell(40, 6, "Free Beta Pass", border=1)
+    pdf.cell(35, 6, "INR 0", border=1)
+    pdf.cell(107, 6, "Persistent cloud account, daily logging, 3 AI vision scans.", border=1, ln=True)
+
+    pdf.cell(40, 6, "Pro Athlete Pass", border=1)
+    pdf.cell(35, 6, "INR 199 / mo", border=1)
+    pdf.cell(107, 6, "Unlimited InBody scans, meal photo OCR, dynamic macro recalculations.", border=1, ln=True)
+
+    pdf.cell(40, 6, "Executive Audit Pass", border=1)
+    pdf.cell(35, 6, "INR 499 / report", border=1)
+    pdf.cell(107, 6, "Full body composition assessment + Branded KSP Audit PDF report.", border=1, ln=True)
+    pdf.ln(3)
+
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(0, 6, "4. HOW TO USE THE APP (4-STEP CLIENT ONBOARDING)", ln=True)
+    pdf.line(14, pdf.get_y(), 196, pdf.get_y())
+    pdf.ln(2)
+
+    pdf.set_font("Helvetica", "", 9)
+    pdf.multi_cell(182, 5,
+        "Step 1: Sign Up on the app to create your persistent cloud account.\n"
+        "Step 2: Upload your Gym InBody Scan or Mirror Photo to lock in your clinical BMR & calorie targets.\n"
+        "Step 3: Snap photos of your meals or type regional food items to track macros effortlessly.\n"
+        "Step 4: Download your Official KSP Fitness Audit PDF at the end of each training cycle."
+    )
+
+    return bytes(pdf.output())
+
 # 6. Database Operations
 def fetch_user(email):
     if supabase:
@@ -468,7 +585,7 @@ def create_user(email, name, pw_hash):
         "smm_kg": 27.8,
         "inbody_score": 66,
         "visceral_fat_level": 12,
-        "assessment_notes": "Clinical InBody analysis reveals 34.1% body fat with 49.6kg lean mass. Elevated visceral fat (Level 12) mandates aggressive fat oxidation while preserving existing muscular base.",
+        "assessment_notes": "Clinical InBody analysis reveals 34.1% body fat with 49.6kg lean mass. Elevated visceral fat (Level 12) mandates targeted fat oxidation while preserving existing muscular base.",
         **init_proto
     }
     if supabase:
@@ -552,7 +669,6 @@ if not st.session_state.auth_user:
     st.info("👋 Welcome to **KSP Fitness OS**. Please **Sign Up** or **Log In** from the sidebar to access your persistent cloud profile, InBody scanner, AI vision engine, and workout logs.")
     st.stop()
 
-# Retrieve user records
 user_record = fetch_user(st.session_state.auth_user)
 if not user_record:
     st.error("Session expired. Please log in again.")
@@ -661,7 +777,6 @@ with right_col:
     st.subheader("🏋️ Body Composition & Training OS")
     tab_inbody, tab_physique, tab_workout = st.tabs(["📄 Scan InBody Sheet", "📸 Mirror Photo Scan", "📝 Workout Log"])
     
-    # TAB 1: InBody Sheet Scanner
     with tab_inbody:
         st.markdown("#### Upload Gym InBody / DEXA Printout")
         inbody_file = st.file_uploader("Upload high-res photo of your InBody report:", type=["jpg", "png", "jpeg"], key="inbody_uploader")
@@ -679,7 +794,6 @@ with right_col:
                         v_fat = in_data.get("visceral_fat_level", 12)
                         score_val = in_data.get("inbody_score", 66)
                         
-                        # Re-calculate with Katch-McArdle precision
                         updated_proto = compute_clinical_metabolic_protocol(
                             w_val, prof["height_cm"], prof["age"], prof["gender"], prof["activity"], pbf_val, ffm_val
                         )
@@ -704,7 +818,6 @@ with right_col:
         if prof.get("inbody_score"):
             st.markdown(f"> **InBody Score:** `{prof.get('inbody_score')}/100` | **Visceral Fat:** `Level {prof.get('visceral_fat_level')}` | **SMM:** `{prof.get('smm_kg')}kg`")
 
-    # TAB 2: Mirror Photo Scan
     with tab_physique:
         st.markdown("#### Upload Mirror Physique Photo")
         uploaded_physique = st.file_uploader("Upload full-torso front/back photo:", type=["jpg", "png", "jpeg"], key="body_uploader")
@@ -731,7 +844,6 @@ with right_col:
                         c_bf3.metric("Fat Mass", f"{updated_proto['fat_mass_kg']} kg")
                         st.rerun()
 
-    # TAB 3: Workout Log
     with tab_workout:
         st.markdown("#### Log Training Set")
         w_split = st.selectbox("Split:", ["Push (Chest/Delts/Triceps)", "Pull (Back/Biceps)", "Legs (Quads/Hamstrings)", "Upper / Lower", "Full Body"])
@@ -774,18 +886,27 @@ with right_col:
 
 st.write("---")
 
-# 12. Client Executive PDF Export
-st.subheader("📄 Client Executive Export")
-pdf_col1, pdf_col2 = st.columns([2, 1])
+# 12. Client Executive PDF Export & Platform Deck
+st.subheader("📄 Client Executive Export & Platform Overview")
+pdf_col1, pdf_col2 = st.columns([1, 1])
+
 with pdf_col1:
-    st.write("Generate a branded, confidential PDF summary containing your clinical InBody metrics, body fat audit, macro targets, meal ledger, and workout sets.")
-with pdf_col2:
     pdf_bytes = build_pdf_report(prof, meal_logs, workout_logs)
     st.download_button(
-        label="📥 Download KSP Fitness Audit (PDF)",
+        label="📥 Download My Fitness Audit (PDF)",
         data=pdf_bytes,
         file_name=f"KSP_Fitness_Audit_{prof['name']}_{datetime.now().strftime('%Y%m%d')}.pdf",
         mime="application/pdf",
         type="primary",
+        use_container_width=True
+    )
+
+with pdf_col2:
+    deck_bytes = generate_positioning_pdf_bytes()
+    st.download_button(
+        label="📑 Download Platform Guide & Pricing Deck (PDF)",
+        data=deck_bytes,
+        file_name="KSP_Fitness_OS_Platform_Guide.pdf",
+        mime="application/pdf",
         use_container_width=True
     )
