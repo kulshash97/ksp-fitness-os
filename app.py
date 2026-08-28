@@ -104,7 +104,6 @@ def compute_clinical_metabolic_protocol(weight_kg, height_cm, age_yrs, gender, a
         fat_mass_kg = round(weight_kg * (body_fat_pct / 100.0), 2)
         lean_mass_kg = round(weight_kg - fat_mass_kg, 2)
     else:
-        # Default standard estimate
         body_fat_pct = 24.0 if gender == "Male" else 30.0
         fat_mass_kg = round(weight_kg * (body_fat_pct / 100.0), 2)
         lean_mass_kg = round(weight_kg - fat_mass_kg, 2)
@@ -112,22 +111,21 @@ def compute_clinical_metabolic_protocol(weight_kg, height_cm, age_yrs, gender, a
     # Step 4: Strict Protocol Routing Logic Based On Body Fat
     if (gender == "Male" and body_fat_pct > 20.0) or (gender == "Female" and body_fat_pct > 28.0):
         prescribed_goal = "Targeted Fat Loss & Muscle Preservation"
-        target_calories = tdee - 700.0  # 700 kcal deficit
-        # Minimum safety floor
+        target_calories = tdee - 700.0
         min_floor = 1350.0 if gender == "Male" else 1200.0
         target_calories = max(min_floor, target_calories)
-        protein_g = weight_kg * 2.0  # 2.0g per kg of total bodyweight
+        protein_g = weight_kg * 2.0
     elif (gender == "Male" and 15.0 <= body_fat_pct <= 20.0) or (gender == "Female" and 23.0 <= body_fat_pct <= 28.0):
         prescribed_goal = "Body Recomposition"
-        target_calories = tdee - 250.0  # Slight deficit / near maintenance
+        target_calories = tdee - 250.0
         protein_g = weight_kg * 2.2
     else:
         prescribed_goal = "Lean Bulk / Hypertrophy Phase"
-        target_calories = tdee + 275.0  # Controlled surplus
+        target_calories = tdee + 275.0
         protein_g = weight_kg * 2.0
 
     # Step 5: Macronutrient Partitioning
-    fat_calories = target_calories * 0.25  # 25% of energy
+    fat_calories = target_calories * 0.25
     fat_g = fat_calories / 9.0
     protein_calories = protein_g * 4.0
     carb_calories = max(0.0, target_calories - (protein_calories + fat_calories))
@@ -236,9 +234,10 @@ def analyze_physique_ai(pil_img: Image.Image, user_prof: dict, key: str):
     - Height: {user_prof['height_cm']} cm
     - Age: {user_prof['age']} years
     
-    TASK:
-    1. Estimate visual Body Fat % based on abdominal definition, clavicular width, and subcutaneous adiposity.
-    2. Deliver clear, clinical, motivating feedback highlighting structural muscle thickness, posture alignment, and exact focal areas for fat reduction without clinical jargon errors.
+    CLOTHING & OCCLUSION INSTRUCTIONS:
+    - If the subject is wearing loose clothing covering the torso/waist, recognize that abdominal fat is obscured.
+    - Apply a conservative correction (+3% to +5%) to the visual estimate rather than basing body fat solely on exposed arms and shoulders.
+    - If shirtless/clear, estimate visual body fat directly from abdominal definition, waistline tightness, and muscular conditioning.
     
     OUTPUT STRICT JSON ONLY:
     {{
@@ -614,7 +613,6 @@ with right_col:
                     scan = analyze_physique_ai(p_img, prof, API_KEY)
                     if scan:
                         new_bf = scan.get("estimated_body_fat_pct", 24.0)
-                        # Re-route strict protocol automatically
                         updated_proto = compute_clinical_metabolic_protocol(
                             prof["weight_kg"], prof["height_cm"], prof["age"], prof["gender"], prof["activity"], new_bf
                         )
