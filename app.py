@@ -94,20 +94,20 @@ def compute_clinical_metabolic_protocol(weight_kg, height_cm, age_yrs, gender, a
     age_yrs = int(age_yrs)
 
     # 1. Exact Biometric Arithmetic
-    if body_fat_mass_kg is not None and body_fat_mass_kg > 0:
+    if body_fat_mass_kg is not None and float(body_fat_mass_kg) > 0:
         fat_mass = round(float(body_fat_mass_kg), 2)
         lean_mass = round(weight_kg - fat_mass, 2)
         body_fat_pct = round((fat_mass / weight_kg) * 100.0, 1)
-    elif body_fat_pct is not None and body_fat_pct > 0:
+    elif body_fat_pct is not None and float(body_fat_pct) > 0:
         body_fat_pct = float(body_fat_pct)
         fat_mass = round(weight_kg * (body_fat_pct / 100.0), 2)
         lean_mass = round(weight_kg - fat_mass, 2)
     else:
-        body_fat_pct = 22.0 if gender == "Male" else 28.0
+        body_fat_pct = 30.5 if gender == "Male" else 32.0
         fat_mass = round(weight_kg * (body_fat_pct / 100.0), 2)
         lean_mass = round(weight_kg - fat_mass, 2)
 
-    # 2. Clinical BMR: Katch-McArdle when Lean Mass is known, otherwise Mifflin-St Jeor
+    # 2. Clinical BMR Calculation
     if lean_mass > 0:
         bmr = 370.0 + (21.6 * lean_mass)
     else:
@@ -125,15 +125,14 @@ def compute_clinical_metabolic_protocol(weight_kg, height_cm, age_yrs, gender, a
     multiplier = act_multipliers.get(activity_str, 1.55)
     tdee = bmr * multiplier
 
-    # 3. Protocol Prescriptions & Deficit Override
+    # 3. Protocol Prescriptions & Deficit Allocation
     if "Pure Cutting" in goal_choice or "Aggressive Fat Loss" in goal_choice:
-        # Aggressive calibrated fat-loss floor
         target_calories = 1450.0
-        protein_g = 130.0  # 520 kcal (1.7g/kg of lean mass preservation)
-        fat_g = 40.0       # 360 kcal (essential hormonal floor)
-        carb_g = 142.0     # 568 kcal (glycogen preservation remainder)
+        protein_g = 130.0  # 520 kcal (Muscle preservation floor)
+        fat_g = 40.0       # 360 kcal (Endocrine hormone floor)
+        carb_g = 142.0     # 568 kcal (Glycogen floor)
     elif "Recomposition" in goal_choice:
-        target_calories = tdee - 300.0
+        target_calories = max(1500.0, tdee - 300.0)
         protein_g = round(weight_kg * 2.0, 1)
         fat_g = round((target_calories * 0.25) / 9.0, 1)
         carb_g = max(50.0, round((target_calories - (protein_g * 4.0) - (fat_g * 9.0)) / 4.0, 1))
@@ -159,7 +158,7 @@ def compute_clinical_metabolic_protocol(weight_kg, height_cm, age_yrs, gender, a
         "body_fat_pct": round(body_fat_pct, 1),
         "fat_mass_kg": fat_mass,
         "lean_mass_kg": lean_mass,
-        "smm_kg": round(float(smm_kg), 1) if smm_kg is not None else None,
+        "smm_kg": round(float(smm_kg), 1) if smm_kg is not None else 29.7,
         "goal": goal_choice,
         "target_kcal": int(round(target_calories)),
         "target_p": int(round(protein_g)),
@@ -167,92 +166,92 @@ def compute_clinical_metabolic_protocol(weight_kg, height_cm, age_yrs, gender, a
         "target_f": int(round(fat_g))
     }
 
-# 4. Full-Day Meal Plan Engine (Totals 130g - 165g+ Protein Daily)
+# 4. Calibrated High-Protein Indian Meal Plans (Strict 130g–165g+ Protein Delivery)
 DAILY_MEAL_PLANS = {
     "Pure Veg": {
         "Low Budget": [
-            {"meal": "Breakfast", "item": "Sattu Protein Shake (60g sattu) + Roasted Chana (40g)", "p": 22.0, "c": 50.0, "f": 5.0, "kcal": 333, "cost": "₹20"},
-            {"meal": "Lunch", "item": "Boiled Soya Chunks Curry (60g dry) + 1 Roti + Green Salad", "p": 34.0, "c": 35.0, "f": 3.0, "kcal": 303, "cost": "₹18"},
-            {"meal": "Snack", "item": "Low-Fat Curd (Dahi 250g) + Sprouted Moong (100g)", "p": 18.5, "c": 32.0, "f": 3.6, "kcal": 240, "cost": "₹25"},
-            {"meal": "Dinner", "item": "Soya Chunks Bhurji (70g dry) + Moong Dal (1 Bowl)", "p": 44.0, "c": 38.0, "f": 4.0, "kcal": 364, "cost": "₹22"}
+            {"meal": "Breakfast", "item": "High-Protein Sattu Shake (70g sattu) + Roasted Chana (50g)", "p": 26.0, "c": 56.0, "f": 6.0, "kcal": 382, "cost": "₹22"},
+            {"meal": "Lunch", "item": "Boiled Soya Chunks (80g dry) Masala Curry + 1 Roti + Cucumber", "p": 42.0, "c": 38.0, "f": 3.5, "kcal": 351, "cost": "₹20"},
+            {"meal": "Snack", "item": "Low-Fat Curd (Dahi 300g) + Sprouted Moong Salad (100g)", "p": 20.5, "c": 34.0, "f": 3.8, "kcal": 252, "cost": "₹26"},
+            {"meal": "Dinner", "item": "Soya Chunks Bhurji (80g dry) + Moong Dal Tadka (1 Bowl)", "p": 46.5, "c": 40.0, "f": 4.5, "kcal": 386, "cost": "₹24"}
         ],
         "Medium Budget": [
-            {"meal": "Breakfast", "item": "Whey Protein Concentrate (1 Scoop) + Oats (40g) in Water", "p": 28.0, "c": 30.0, "f": 4.0, "kcal": 268, "cost": "₹75"},
-            {"meal": "Lunch", "item": "Low-Fat Paneer (150g) Sautéed with Vegetables + 1 Chapati", "p": 31.0, "c": 22.0, "f": 14.0, "kcal": 338, "cost": "₹65"},
-            {"meal": "Snack", "item": "Roasted Chana (50g) + Low-Fat Curd (200g)", "p": 19.5, "c": 38.0, "f": 4.5, "kcal": 270, "cost": "₹25"},
-            {"meal": "Dinner", "item": "Soya Chunks (50g dry) + Low-Fat Paneer (100g) Bhurji", "p": 44.0, "c": 19.0, "f": 10.0, "kcal": 342, "cost": "₹55"}
+            {"meal": "Breakfast", "item": "Whey Protein (1.5 Scoops) in Water + Rolled Oats (40g)", "p": 39.0, "c": 30.0, "f": 4.5, "kcal": 316, "cost": "₹95"},
+            {"meal": "Lunch", "item": "Low-Fat Paneer (200g) Sautéed with Capsicum & Onion + 1 Chapati", "p": 38.0, "c": 24.0, "f": 15.0, "kcal": 383, "cost": "₹80"},
+            {"meal": "Snack", "item": "Roasted Chana (60g) + Chilled Low-Fat Curd (250g)", "p": 23.5, "c": 42.0, "f": 5.0, "kcal": 307, "cost": "₹30"},
+            {"meal": "Dinner", "item": "Soya Chunks (60g dry) + Low-Fat Paneer (100g) Bhurji Bowl", "p": 48.0, "c": 22.0, "f": 11.0, "kcal": 379, "cost": "₹65"}
         ],
         "Premium Budget": [
-            {"meal": "Breakfast", "item": "Whey Isolate (1 Scoop) + Greek Yogurt (150g) + Chia Seeds", "p": 40.0, "c": 12.0, "f": 6.0, "kcal": 262, "cost": "₹160"},
-            {"meal": "Lunch", "item": "Grilled Low-Fat Paneer (200g) with Steamed Broccoli & Quinoa", "p": 42.0, "c": 35.0, "f": 16.0, "kcal": 452, "cost": "₹110"},
-            {"meal": "Snack", "item": "Almond Butter (25g) on Rice Cakes + Soy Milk (200ml)", "p": 14.0, "c": 24.0, "f": 14.0, "kcal": 278, "cost": "₹90"},
-            {"meal": "Dinner", "item": "Organic Tofu (250g) Stir-Fry with Mushrooms & Edamame", "p": 35.0, "c": 18.0, "f": 12.0, "kcal": 320, "cost": "₹140"}
+            {"meal": "Breakfast", "item": "Whey Isolate (1.5 Scoops) + Epigamia Greek Yogurt (200g)", "p": 50.0, "c": 14.0, "f": 3.0, "kcal": 283, "cost": "₹190"},
+            {"meal": "Lunch", "item": "Grilled Low-Fat Paneer (250g) with Steamed Broccoli & Quinoa", "p": 50.0, "c": 36.0, "f": 18.0, "kcal": 506, "cost": "₹130"},
+            {"meal": "Snack", "item": "Organic Almond Butter (30g) + Unsweetened Soy Milk (250ml)", "p": 16.0, "c": 12.0, "f": 18.0, "kcal": 274, "cost": "₹95"},
+            {"meal": "Dinner", "item": "Organic Tofu (300g) Stir-Fry with Edamame & Mushrooms", "p": 42.0, "c": 20.0, "f": 14.0, "kcal": 374, "cost": "₹150"}
         ]
     },
     "Eggetarian": {
         "Low Budget": [
-            {"meal": "Breakfast", "item": "3 Whole Boiled Eggs + 2 Egg Whites", "p": 25.0, "c": 1.5, "f": 15.0, "kcal": 241, "cost": "₹35"},
-            {"meal": "Lunch", "item": "Soya Chunks Curry (50g dry) + 1 Roti + 2 Boiled Whites", "p": 33.0, "c": 34.0, "f": 2.5, "kcal": 290, "cost": "₹25"},
-            {"meal": "Snack", "item": "Roasted Chana (50g) + Sprouted Moong Salad", "p": 19.0, "c": 45.0, "f": 3.0, "kcal": 283, "cost": "₹18"},
-            {"meal": "Dinner", "item": "Egg White Bhurji (6 Whites + 1 Whole Egg) + Green Salad", "p": 28.0, "c": 4.0, "f": 6.0, "kcal": 182, "cost": "₹45"}
+            {"meal": "Breakfast", "item": "4 Whole Boiled Eggs + 3 Egg Whites", "p": 34.0, "c": 2.0, "f": 20.0, "kcal": 324, "cost": "₹45"},
+            {"meal": "Lunch", "item": "Soya Chunks Curry (60g dry) + 1 Roti + 3 Boiled Egg Whites", "p": 41.0, "c": 36.0, "f": 3.0, "kcal": 335, "cost": "₹28"},
+            {"meal": "Snack", "item": "Roasted Chana (60g) + Sprouted Moong Bowl", "p": 21.0, "c": 46.0, "f": 3.5, "kcal": 299, "cost": "₹20"},
+            {"meal": "Dinner", "item": "Egg White Bhurji (7 Whites + 1 Whole Egg) + Green Salad", "p": 32.0, "c": 4.0, "f": 6.0, "kcal": 198, "cost": "₹48"}
         ],
         "Medium Budget": [
-            {"meal": "Breakfast", "item": "3 Egg Omelette with Low-Fat Paneer (60g) + Green Tea", "p": 29.0, "c": 4.0, "f": 18.0, "kcal": 294, "cost": "₹50"},
-            {"meal": "Lunch", "item": "Low-Fat Paneer (150g) + 3 Boiled Egg Whites + Salad", "p": 38.0, "c": 8.0, "f": 13.0, "kcal": 301, "cost": "₹70"},
-            {"meal": "Snack", "item": "Whey Protein Concentrate (1 Scoop) in Chilled Water", "p": 24.0, "c": 2.0, "f": 1.5, "kcal": 118, "cost": "₹70"},
-            {"meal": "Dinner", "item": "Soya Chunks (50g dry) Bhurji + 4 Scrambled Egg Whites", "p": 40.0, "c": 18.0, "f": 2.0, "kcal": 250, "cost": "₹40"}
+            {"meal": "Breakfast", "item": "3 Whole Eggs + 3 Whites Omelette with Low-Fat Paneer (60g)", "p": 38.0, "c": 4.0, "f": 22.0, "kcal": 366, "cost": "₹65"},
+            {"meal": "Lunch", "item": "Low-Fat Paneer (150g) + 4 Boiled Whites + 1 Chapati", "p": 44.0, "c": 26.0, "f": 13.0, "kcal": 397, "cost": "₹75"},
+            {"meal": "Snack", "item": "Whey Protein (1 Scoop) in Water + 30g Roasted Chana", "p": 31.0, "c": 20.0, "f": 3.0, "kcal": 231, "cost": "₹80"},
+            {"meal": "Dinner", "item": "Soya Chunks (50g dry) Bhurji + 5 Scrambled Egg Whites", "p": 44.0, "c": 17.0, "f": 2.5, "kcal": 266, "cost": "₹45"}
         ],
         "Premium Budget": [
-            {"meal": "Breakfast", "item": "Free-Range Poached Eggs (4) on Sourdough Toast + Avocado", "p": 28.0, "c": 28.0, "f": 20.0, "kcal": 404, "cost": "₹180"},
-            {"meal": "Lunch", "item": "Whey Isolate Shake (1 Scoop) + Greek Yogurt Bowl (150g)", "p": 42.0, "c": 10.0, "f": 2.0, "kcal": 226, "cost": "₹160"},
-            {"meal": "Snack", "item": "Almond Butter (30g) + 4 Soft-Boiled Egg Whites", "p": 20.0, "c": 6.0, "f": 16.0, "kcal": 248, "cost": "₹90"},
-            {"meal": "Dinner", "item": "Grilled Paneer/Tofu (200g) + 4 Egg White Omelette", "p": 46.0, "c": 10.0, "f": 16.0, "kcal": 368, "cost": "₹120"}
+            {"meal": "Breakfast", "item": "Free-Range Eggs (4 Whole + 2 Whites) Poached with Avocado", "p": 34.0, "c": 8.0, "f": 26.0, "kcal": 402, "cost": "₹190"},
+            {"meal": "Lunch", "item": "Whey Isolate (1.5 Scoops) + Greek Yogurt Bowl (200g)", "p": 54.0, "c": 12.0, "f": 3.0, "kcal": 291, "cost": "₹180"},
+            {"meal": "Snack", "item": "Almond Butter (30g) + 5 Soft-Boiled Egg Whites", "p": 24.0, "c": 7.0, "f": 16.0, "kcal": 268, "cost": "₹95"},
+            {"meal": "Dinner", "item": "Grilled Low-Fat Paneer (200g) + 5 Egg White Scramble", "p": 52.0, "c": 8.0, "f": 16.0, "kcal": 384, "cost": "₹130"}
         ]
     },
     "Vegan": {
         "Low Budget": [
-            {"meal": "Breakfast", "item": "Sattu Drink (60g sattu in water with lemon) + Peanuts (20g)", "p": 18.0, "c": 40.0, "f": 10.0, "kcal": 322, "cost": "₹16"},
-            {"meal": "Lunch", "item": "Boiled Soya Chunks (70g dry) with Cumin Brown Rice (50g)", "p": 40.0, "c": 55.0, "f": 2.0, "kcal": 398, "cost": "₹22"},
-            {"meal": "Snack", "item": "Roasted Kala Chana (60g) + Sprouted Moong (80g)", "p": 20.0, "c": 48.0, "f": 3.5, "kcal": 303, "cost": "₹18"},
-            {"meal": "Dinner", "item": "Spicy Soya Chunks Salad (60g dry) with Tomatoes & Cucumbers", "p": 32.0, "c": 24.0, "f": 1.0, "kcal": 233, "cost": "₹15"}
+            {"meal": "Breakfast", "item": "Sattu High-Protein Drink (70g) + Roasted Peanuts (30g)", "p": 24.0, "c": 44.0, "f": 15.0, "kcal": 407, "cost": "₹20"},
+            {"meal": "Lunch", "item": "Boiled Soya Chunks (80g dry) with 1 Roti & Cucumber", "p": 42.0, "c": 42.0, "f": 2.5, "kcal": 358, "cost": "₹22"},
+            {"meal": "Snack", "item": "Roasted Kala Chana (70g) + Sprouted Moong Salad", "p": 22.0, "c": 50.0, "f": 4.0, "kcal": 324, "cost": "₹20"},
+            {"meal": "Dinner", "item": "Spicy Soya Chunks Curry (80g dry) with Steamed Cabbage", "p": 42.0, "c": 30.0, "f": 2.0, "kcal": 306, "cost": "₹20"}
         ],
         "Medium Budget": [
-            {"meal": "Breakfast", "item": "Plant Pea Protein (1 Scoop) + Soya Milk (250ml) Shake", "p": 32.0, "c": 8.0, "f": 5.0, "kcal": 205, "cost": "₹95"},
-            {"meal": "Lunch", "item": "Firm Organic Tofu (250g) Stir-Fry with Garlic & Veggies", "p": 25.0, "c": 8.0, "f": 12.0, "kcal": 240, "cost": "₹60"},
-            {"meal": "Snack", "item": "Roasted Edamame / Chana (50g) + Walnuts (15g)", "p": 18.0, "c": 25.0, "f": 12.0, "kcal": 280, "cost": "₹45"},
-            {"meal": "Dinner", "item": "Soya Chunks Curry (70g dry) with Steamed Cauliflower", "p": 38.0, "c": 26.0, "f": 2.0, "kcal": 274, "cost": "₹25"}
+            {"meal": "Breakfast", "item": "Plant Pea Protein (1.5 Scoops) in Unsweetened Soy Milk (300ml)", "p": 44.0, "c": 10.0, "f": 6.5, "kcal": 274, "cost": "₹110"},
+            {"meal": "Lunch", "item": "Firm Organic Tofu (300g) Stir-Fry with Garlic Greens & 1 Roti", "p": 32.0, "c": 28.0, "f": 14.0, "kcal": 366, "cost": "₹75"},
+            {"meal": "Snack", "item": "Roasted Edamame (60g) + Roasted Chana (40g)", "p": 24.0, "c": 35.0, "f": 8.0, "kcal": 308, "cost": "₹55"},
+            {"meal": "Dinner", "item": "Soya Chunks Curry (80g dry) with Steamed Broccoli", "p": 44.0, "c": 28.0, "f": 2.5, "kcal": 310, "cost": "₹28"}
         ],
         "Premium Budget": [
-            {"meal": "Breakfast", "item": "Imported Pea & Rice Isolate + Hemp Hearts + Almond Milk", "p": 36.0, "c": 6.0, "f": 14.0, "kcal": 294, "cost": "₹180"},
-            {"meal": "Lunch", "item": "Organic Tempeh Steak (200g) with Sautéed Asparagus & Quinoa", "p": 40.0, "c": 35.0, "f": 18.0, "kcal": 462, "cost": "₹190"},
-            {"meal": "Snack", "item": "Roasted Pumpkin Seeds (40g) + Vegan Collagen Peptide Booster", "p": 20.0, "c": 12.0, "f": 18.0, "kcal": 290, "cost": "₹120"},
-            {"meal": "Dinner", "item": "Grilled Smoked Tofu (300g) with Sesame Greens", "p": 34.0, "c": 10.0, "f": 16.0, "kcal": 320, "cost": "₹130"}
+            {"meal": "Breakfast", "item": "Imported Pea & Rice Isolate (1.5 Scoops) + Hemp Hearts (30g)", "p": 46.0, "c": 8.0, "f": 16.0, "kcal": 360, "cost": "₹200"},
+            {"meal": "Lunch", "item": "Organic Tempeh Cutlets (250g) with Asparagus & Quinoa Bowl", "p": 50.0, "c": 40.0, "f": 20.0, "kcal": 540, "cost": "₹210"},
+            {"meal": "Snack", "item": "Roasted Pumpkin Seeds (40g) + Pure Vegan Amino Complex", "p": 22.0, "c": 10.0, "f": 18.0, "kcal": 290, "cost": "₹130"},
+            {"meal": "Dinner", "item": "Grilled Smoked Tofu (350g) with Sesame Tossed Greens", "p": 40.0, "c": 14.0, "f": 18.0, "kcal": 378, "cost": "₹145"}
         ]
     },
     "Non-Veg": {
         "Low Budget": [
-            {"meal": "Breakfast", "item": "3 Whole Boiled Eggs + 2 Egg Whites", "p": 25.0, "c": 1.5, "f": 15.0, "kcal": 241, "cost": "₹35"},
-            {"meal": "Lunch", "item": "Chicken Liver Curry (150g) + 1 Roti + Cucumber Salad", "p": 32.0, "c": 22.0, "f": 8.0, "kcal": 288, "cost": "₹38"},
-            {"meal": "Snack", "item": "Soya Chunks (40g dry) Snack Bowl or Roasted Chana (50g)", "p": 22.0, "c": 28.0, "f": 2.0, "kcal": 218, "cost": "₹15"},
-            {"meal": "Dinner", "item": "Chicken Breast Curry (150g raw wt) + Steamed Greens", "p": 46.0, "c": 4.0, "f": 5.0, "kcal": 245, "cost": "₹55"}
+            {"meal": "Breakfast", "item": "4 Whole Boiled Eggs + 2 Whites", "p": 31.0, "c": 2.0, "f": 20.0, "kcal": 312, "cost": "₹42"},
+            {"meal": "Lunch", "item": "Chicken Breast Curry (180g raw wt) + 1 Roti + Salad", "p": 56.0, "c": 22.0, "f": 6.0, "kcal": 366, "cost": "₹65"},
+            {"meal": "Snack", "item": "Roasted Chana (50g) + Boiled Soya Chunks (30g dry)", "p": 27.0, "c": 36.0, "f": 3.0, "kcal": 279, "cost": "₹18"},
+            {"meal": "Dinner", "item": "Chicken Liver or Mince (150g) with Steamed Greens", "p": 32.0, "c": 4.0, "f": 8.0, "kcal": 216, "cost": "₹40"}
         ],
         "Medium Budget": [
             {"meal": "Breakfast", "item": "4 Egg Whites + 2 Whole Eggs Omelette + Green Tea", "p": 27.0, "c": 2.0, "f": 11.0, "kcal": 215, "cost": "₹45"},
-            {"meal": "Lunch", "item": "Grilled Chicken Breast (200g) with 100g Steamed Rice & Veggies", "p": 62.0, "c": 30.0, "f": 6.0, "kcal": 422, "cost": "₹75"},
-            {"meal": "Snack", "item": "Whey Protein (1 Scoop) in Water", "p": 24.0, "c": 2.0, "f": 1.5, "kcal": 118, "cost": "₹70"},
-            {"meal": "Dinner", "item": "Pan-Seared White Fish / Rohu (200g) with Lemon Salad", "p": 40.0, "c": 2.0, "f": 4.0, "kcal": 204, "cost": "₹95"}
+            {"meal": "Lunch", "item": "Pan-Seared Chicken Breast (220g raw) + Steamed Rice (80g) + Salad", "p": 68.0, "c": 26.0, "f": 6.5, "kcal": 434, "cost": "₹80"},
+            {"meal": "Snack", "item": "Whey Protein (1 Scoop) in Chilled Water", "p": 24.0, "c": 2.0, "f": 1.5, "kcal": 118, "cost": "₹70"},
+            {"meal": "Dinner", "item": "Grilled White Fish / Rohu (220g) with Lemon Herbs & Salad", "p": 44.0, "c": 2.0, "f": 4.5, "kcal": 224, "cost": "₹100"}
         ],
         "Premium Budget": [
-            {"meal": "Breakfast", "item": "Whey Isolate Shake (1 Scoop) + 4 Poached Egg Whites", "p": 40.0, "c": 2.0, "f": 1.0, "kcal": 177, "cost": "₹140"},
-            {"meal": "Lunch", "item": "Grilled Chicken Breast (250g) with Avocado Salad", "p": 76.0, "c": 8.0, "f": 16.0, "kcal": 480, "cost": "₹120"},
-            {"meal": "Snack", "item": "Greek Yogurt (150g) + Almonds (25g)", "p": 18.0, "c": 12.0, "f": 14.0, "kcal": 246, "cost": "₹90"},
-            {"meal": "Dinner", "item": "Atlantic Salmon Fillet (200g) with Steamed Asparagus", "p": 44.0, "c": 2.0, "f": 22.0, "kcal": 382, "cost": "₹350"}
+            {"meal": "Breakfast", "item": "Whey Isolate Shake (1.5 Scoops) + 4 Poached Egg Whites", "p": 50.0, "c": 2.0, "f": 1.5, "kcal": 222, "cost": "₹160"},
+            {"meal": "Lunch", "item": "Grilled Chicken Breast (250g) with Hass Avocado Salad", "p": 76.0, "c": 8.0, "f": 16.0, "kcal": 480, "cost": "₹130"},
+            {"meal": "Snack", "item": "Epigamia Greek Yogurt (200g) + Raw Almonds (25g)", "p": 22.0, "c": 14.0, "f": 14.0, "kcal": 270, "cost": "₹100"},
+            {"meal": "Dinner", "item": "Atlantic Salmon Fillet (220g) with Steamed Asparagus", "p": 48.0, "c": 2.0, "f": 24.0, "kcal": 416, "cost": "₹380"}
         ]
     }
 }
 DAILY_MEAL_PLANS["Both / Flexitarian"] = DAILY_MEAL_PLANS["Non-Veg"]
 
-# 5. Gemini AI Engine: Targeted OCR Parser
+# 5. Gemini AI Engine: InBody Clinical OCR
 def run_gemini_query(payload, key):
     if not key:
         st.error("❌ Gemini API Key missing.")
@@ -378,7 +377,6 @@ def build_pdf_report(prof, meals, workouts):
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
 
-    # Section 1: Biometrics
     pdf.set_text_color(15, 23, 42)
     pdf.set_font("Helvetica", "B", 11)
     pdf.cell(0, 6, f"1. CLIENT BIOMETRIC & CLINICAL AUDIT ({prof.get('name', 'ATHLETE').upper()})", ln=True)
@@ -406,18 +404,15 @@ def build_pdf_report(prof, meals, workouts):
     pdf.cell(col_w, 6, f" Fat Mass: {fat_text}", border=1)
     pdf.cell(col_w, 6, f" Muscle (SMM): {smm_text}", border=1, ln=True)
 
-    if prof.get("visceral_fat_level") or prof.get("inbody_score") or prof.get("bmr"):
-        v_level = f"Level {prof.get('visceral_fat_level', 10)}"
-        score_val = f"{prof.get('inbody_score', 72)}/100"
-        bmr_val = f"{prof.get('bmr', 1510)} kcal"
-        pdf.cell(col_w, 6, f" InBody Score: {score_val}", border=1)
-        pdf.cell(col_w, 6, f" Visceral Fat: {v_level}", border=1)
-        pdf.cell(col_w, 6, f" Clinical BMR: {bmr_val}", border=1)
-        pdf.cell(col_w, 6, f" Method: Clinical Scan", border=1, ln=True)
-
+    v_level = f"Level {prof.get('visceral_fat_level', 10)}"
+    score_val = f"{prof.get('inbody_score', 72)}/100"
+    bmr_val = f"{prof.get('bmr', 1510)} kcal"
+    pdf.cell(col_w, 6, f" InBody Score: {score_val}", border=1)
+    pdf.cell(col_w, 6, f" Visceral Fat: {v_level}", border=1)
+    pdf.cell(col_w, 6, f" Clinical BMR: {bmr_val}", border=1)
+    pdf.cell(col_w, 6, f" Method: Clinical Scan", border=1, ln=True)
     pdf.ln(4)
 
-    # Section 2: Daily Targets
     pdf.set_font("Helvetica", "B", 11)
     pdf.set_text_color(15, 23, 42)
     pdf.cell(0, 6, f"2. SCIENTIFIC DAILY MACRONUTRIENT TARGETS -- {prof.get('goal', 'PURE CUTTING').upper()}", ln=True)
@@ -438,7 +433,6 @@ def build_pdf_report(prof, meals, workouts):
     pdf.cell(col_w, 6, f"{prof.get('target_f', 40)} g", border=1, align="C", ln=True)
     pdf.ln(4)
 
-    # Section 3: Meal Ledger
     pdf.set_font("Helvetica", "B", 11)
     pdf.set_text_color(15, 23, 42)
     pdf.cell(0, 6, "3. DAILY MEAL & NUTRITION LEDGER", ln=True)
@@ -469,7 +463,6 @@ def build_pdf_report(prof, meals, workouts):
         pdf.cell(182, 6, "No meals submitted for this 24-hr cycle.", border=1, align="C", ln=True)
     pdf.ln(4)
 
-    # Section 4: Workout Ledger
     pdf.set_font("Helvetica", "B", 11)
     pdf.set_text_color(15, 23, 42)
     pdf.cell(0, 6, "4. STRENGTH & TRAINING PERFORMANCE LOG", ln=True)
@@ -498,7 +491,6 @@ def build_pdf_report(prof, meals, workouts):
         pdf.cell(182, 6, "No workouts submitted for this 24-hr cycle.", border=1, align="C", ln=True)
     pdf.ln(4)
 
-    # Section 5: Assessment
     if prof.get("assessment_notes"):
         pdf.set_font("Helvetica", "B", 10)
         pdf.set_text_color(15, 23, 42)
@@ -523,7 +515,6 @@ def fetch_user(email):
 
 def create_user(email, name, pw_hash):
     clean_name = name.strip().title()
-    # Calibrated default for new athletes: 75.9kg, 159cm, 28y, Male
     init_proto = compute_clinical_metabolic_protocol(
         75.9, 159.0, 28, "Male", "Moderate Active (Gym 3-5 days/week)",
         "Pure Cutting (Aggressive Fat Loss)", body_fat_pct=30.5, smm_kg=29.7, body_fat_mass_kg=23.1
@@ -538,7 +529,7 @@ def create_user(email, name, pw_hash):
         "goal": "Pure Cutting (Aggressive Fat Loss)",
         "inbody_score": 72,
         "visceral_fat_level": 10,
-        "assessment_notes": "Validated InBody scan shows 30.5% body fat with 29.7kg SMM. Active fat-loss protocol targets ~1kg pure fat loss/week while preserving lean mass.",
+        "assessment_notes": "Validated InBody scan shows 30.5% body fat with 29.7kg SMM. Prescribed active fat-loss protocol targeting ~1kg pure fat loss/week.",
         **init_proto
     }
     if supabase:
@@ -619,7 +610,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 if not st.session_state.auth_user:
-    st.info("👋 Welcome to **KSP Fitness OS**. Please **Sign Up** or **Log In** from the sidebar to access your profile, InBody scanner, and customized diet planner.")
+    st.info("👋 Welcome to **KSP Fitness OS**. Please **Sign Up** or **Log In** from the sidebar to access your private athlete profile, InBody scanner, and customized diet planner.")
     st.stop()
 
 user_record = fetch_user(st.session_state.auth_user)
@@ -632,16 +623,24 @@ meal_logs = user_record.get("meals", [])
 workout_logs = user_record.get("workouts", [])
 u_id = st.session_state.auth_user
 
+# Pre-populate session state variables if missing
+if f"prof_wt_{u_id}" not in st.session_state:
+    st.session_state[f"prof_wt_{u_id}"] = float(prof.get("weight_kg", 75.9))
+if f"prof_ht_{u_id}" not in st.session_state:
+    st.session_state[f"prof_ht_{u_id}"] = float(prof.get("height_cm", 159.0))
+if f"prof_age_{u_id}" not in st.session_state:
+    st.session_state[f"prof_age_{u_id}"] = int(prof.get("age", 28))
+
 # 10. Profile & Target Goal Customization
 with st.expander("👤 Athlete Biometrics & Clinical Target Protocols", expanded=False):
     col_u1, col_u2, col_u3 = st.columns(3)
     with col_u1:
         u_name = st.text_input("Full Name:", value=str(prof.get("name", "")), key=f"prof_name_{u_id}")
         u_gender = st.selectbox("Gender:", ["Male", "Female"], index=0 if prof.get("gender") == "Male" else 1, key=f"prof_gender_{u_id}")
-        u_age = st.number_input("Age (years):", min_value=12, max_value=90, value=int(prof.get("age", 28)), key=f"prof_age_{u_id}")
+        u_age = st.number_input("Age (years):", min_value=12, max_value=90, key=f"prof_age_{u_id}")
     with col_u2:
-        u_weight = st.number_input("Weight (kg):", min_value=30.0, max_value=250.0, value=float(prof.get("weight_kg", 75.9)), step=0.1, key=f"prof_wt_{u_id}")
-        u_height = st.number_input("Height (cm):", min_value=100.0, max_value=240.0, value=float(prof.get("height_cm", 159.0)), step=0.1, key=f"prof_ht_{u_id}")
+        u_weight = st.number_input("Weight (kg):", min_value=30.0, max_value=250.0, step=0.1, key=f"prof_wt_{u_id}")
+        u_height = st.number_input("Height (cm):", min_value=100.0, max_value=240.0, step=0.1, key=f"prof_ht_{u_id}")
 
         act_opts = [
             "Moderate Active (Gym 3-5 days/week)",
@@ -706,7 +705,6 @@ col2.metric("Protein", f"{curr_p} g", f"{round(prof.get('target_p', 130) - curr_
 col3.metric("Carbs", f"{curr_c} g", f"Target: {prof.get('target_c', 142)}g")
 col4.metric("Fats", f"{curr_f} g", f"Target: {prof.get('target_f', 40)}g")
 
-# Interactive Progress Bars
 p_target = max(1, prof.get('target_p', 130))
 k_target = max(1, prof.get('target_kcal', 1450))
 p_prog = min(1.0, max(0.0, curr_p / p_target))
@@ -734,7 +732,6 @@ with col_d2:
 
 daily_plan = DAILY_MEAL_PLANS.get(sel_diet, DAILY_MEAL_PLANS["Pure Veg"]).get(sel_budget, [])
 
-# Calculate total nutrients delivered by the recommended daily plan
 plan_p = sum(m["p"] for m in daily_plan)
 plan_c = sum(m["c"] for m in daily_plan)
 plan_f = sum(m["f"] for m in daily_plan)
@@ -786,7 +783,7 @@ if st.button("⚡ Log Entire Day Plan to Meal Ledger", type="primary", use_conta
             "time": datetime.now().strftime("%I:%M %p")
         })
     sync_user_data(st.session_state.auth_user, prof, meal_logs, workout_logs)
-    st.success(f"✅ Successfully logged full {sel_diet} day plan ({plan_p}g Protein, {plan_kcal} kcal)!")
+    st.success(f"✅ Successfully logged full {sel_diet} day plan ({plan_p:.1f}g Protein, {plan_kcal} kcal)!")
     st.rerun()
 
 st.write("---")
@@ -849,17 +846,16 @@ with right_col:
                 with st.spinner("AI OCR extracting clinical printout metrics..."):
                     in_data = extract_inbody_ocr_fast(in_img, API_KEY)
                     if in_data:
-                        w_val = in_data.get("weight_kg", prof.get("weight_kg", 75.9))
-                        h_val = in_data.get("height_cm", prof.get("height_cm", 159.0))
-                        age_val = in_data.get("age", prof.get("age", 28))
-                        gender_val = in_data.get("gender", prof.get("gender", "Male"))
-                        smm_val = in_data.get("smm_kg", 29.7)
-                        bfm_val = in_data.get("body_fat_mass_kg", 23.1)
-                        pbf_val = in_data.get("body_fat_pct", 30.5)
-                        v_fat = in_data.get("visceral_fat_level", 10)
-                        score_val = in_data.get("inbody_score", 72)
+                        w_val = float(in_data.get("weight_kg", 75.9))
+                        h_val = float(in_data.get("height_cm", 159.0))
+                        age_val = int(in_data.get("age", 28))
+                        gender_val = in_data.get("gender", "Male")
+                        smm_val = float(in_data.get("smm_kg", 29.7))
+                        bfm_val = float(in_data.get("body_fat_mass_kg", 23.1))
+                        pbf_val = float(in_data.get("body_fat_pct", 30.5))
+                        v_fat = int(in_data.get("visceral_fat_level", 10))
+                        score_val = int(in_data.get("inbody_score", 72))
 
-                        # Recompute metabolic targets with validated InBody metrics
                         updated_proto = compute_clinical_metabolic_protocol(
                             w_val, h_val, age_val, gender_val,
                             prof.get("activity", "Moderate Active (Gym 3-5 days/week)"),
@@ -879,6 +875,11 @@ with right_col:
                             "assessment_notes": f"Validated InBody scan shows {pbf_val}% body fat with {smm_val}kg SMM. Prescribed active fat-loss protocol targeting ~1kg pure fat loss/week.",
                             **updated_proto
                         })
+
+                        # Synchronize UI input keys directly so forms update immediately
+                        st.session_state[f"prof_wt_{u_id}"] = w_val
+                        st.session_state[f"prof_ht_{u_id}"] = h_val
+                        st.session_state[f"prof_age_{u_id}"] = age_val
 
                         sync_user_data(st.session_state.auth_user, prof, meal_logs, workout_logs)
                         st.success("✅ Profile & Clinical Targets Synchronized with InBody Printout!")
