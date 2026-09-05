@@ -10,9 +10,9 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from fpdf import FPDF
 from supabase import create_client, Client
 
-# 1. Page Config & Dark Theme
+# 1. Page Config & Dark Neon Aesthetics
 st.set_page_config(
-    page_title="KSP Fitness OS • Clinical Diagnostician",
+    page_title="KSP Fitness OS • Clinical Diagnostician & Diet Architect",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -21,33 +21,41 @@ st.set_page_config(
 st.markdown("""
 <style>
     .stApp {
-        background-color: #070B14;
+        background: radial-gradient(circle at top left, #0D1527, #070B14 80%);
         color: #F8FAFC;
     }
     .ksp-header {
-        background-color: #0F172A;
-        padding: 16px 20px;
-        border-radius: 12px;
-        border: 1px solid #1E293B;
-        margin-bottom: 16px;
+        background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
+        padding: 20px 24px;
+        border-radius: 14px;
+        border: 1px solid #334155;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        margin-bottom: 20px;
     }
     .ksp-brand {
         color: #3B82F6;
         font-size: 11px;
         font-weight: 800;
-        letter-spacing: 1.5px;
+        letter-spacing: 2px;
         text-transform: uppercase;
     }
     .ksp-title {
         color: #FFFFFF;
-        font-size: 22px;
+        font-size: 24px;
         font-weight: 900;
-        margin-top: 2px;
+        margin-top: 4px;
     }
     .ksp-tagline {
         color: #94A3B8;
         font-size: 12px;
         font-style: italic;
+    }
+    .diet-card {
+        background: #0F172A;
+        border: 1px solid #1E293B;
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 12px;
     }
     div[data-testid="stMetricValue"] {
         font-size: 24px !important;
@@ -60,7 +68,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 2. Key Extraction & Supabase Setup
+# 2. Supabase Cloud Connection & API Keys
 API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
@@ -79,8 +87,8 @@ supabase: Client = init_supabase()
 def hash_pw(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
-# 3. Clinical Metabolic Engine (Mifflin-St Jeor & Katch-McArdle)
-def compute_clinical_metabolic_protocol(weight_kg, height_cm, age_yrs, gender, activity_str, body_fat_pct=None, lean_mass_kg=None):
+# 3. Clinical Metabolic Engine with 5 Distinct Goals
+def compute_clinical_metabolic_protocol(weight_kg, height_cm, age_yrs, gender, activity_str, goal_choice, body_fat_pct=None, lean_mass_kg=None):
     if lean_mass_kg is not None and lean_mass_kg > 0:
         bmr = 370.0 + (21.6 * lean_mass_kg)
     else:
@@ -106,22 +114,32 @@ def compute_clinical_metabolic_protocol(weight_kg, height_cm, age_yrs, gender, a
         fat_mass = round(weight_kg * (body_fat_pct / 100.0), 2)
         lean_mass = round(weight_kg - fat_mass, 2)
 
-    if (gender == "Male" and body_fat_pct > 20.0) or (gender == "Female" and body_fat_pct > 28.0):
-        prescribed_goal = "Targeted Fat Loss & Muscle Preservation"
+    # Goal Prescriptions & Scientific Adjustments
+    if "Pure Cutting" in goal_choice:
         target_calories = tdee - 700.0
-        min_floor = 1350.0 if gender == "Male" else 1200.0
-        target_calories = max(min_floor, target_calories)
-        protein_g = weight_kg * 2.0
-    elif (gender == "Male" and 15.0 <= body_fat_pct <= 20.0) or (gender == "Female" and 23.0 <= body_fat_pct <= 28.0):
-        prescribed_goal = "Body Recomposition"
+        protein_g = weight_kg * 2.2
+        fat_pct = 0.20
+    elif "Recomposition" in goal_choice:
         target_calories = tdee - 250.0
         protein_g = weight_kg * 2.2
-    else:
-        prescribed_goal = "Lean Bulk / Hypertrophy Phase"
+        fat_pct = 0.25
+    elif "Lean Bulk" in goal_choice:
         target_calories = tdee + 275.0
         protein_g = weight_kg * 2.0
+        fat_pct = 0.25
+    elif "Aggressive Bulk" in goal_choice:
+        target_calories = tdee + 500.0
+        protein_g = weight_kg * 1.8
+        fat_pct = 0.28
+    else:  # Maintenance & Peak Athletic
+        target_calories = tdee
+        protein_g = weight_kg * 2.0
+        fat_pct = 0.25
 
-    fat_calories = target_calories * 0.25
+    min_floor = 1350.0 if gender == "Male" else 1200.0
+    target_calories = max(min_floor, target_calories)
+
+    fat_calories = target_calories * fat_pct
     fat_g = fat_calories / 9.0
     protein_calories = protein_g * 4.0
     carb_calories = max(0.0, target_calories - (protein_calories + fat_calories))
@@ -133,14 +151,48 @@ def compute_clinical_metabolic_protocol(weight_kg, height_cm, age_yrs, gender, a
         "body_fat_pct": round(body_fat_pct, 1),
         "fat_mass_kg": fat_mass,
         "lean_mass_kg": lean_mass,
-        "goal": prescribed_goal,
+        "goal": goal_choice,
         "target_kcal": int(round(target_calories)),
         "target_p": int(round(protein_g)),
         "target_c": int(round(carb_g)),
         "target_f": int(round(fat_g))
     }
 
-# 4. AI Query & OCR Engine
+# 4. Food Recommendation Database (Tailored to Indian Budgets & Preferences)
+FOOD_LIBRARY = {
+    "Pure Veg": {
+        "Low Budget": [
+            {"item": "Dry Soya Chunks (boiled/curry)", "portion": "70g dry", "p": 36.4, "c": 23.1, "f": 0.4, "kcal": 242, "cost": "₹12", "type": "High Protein Low Fat"},
+            {"item": "Roasted Chana / Bhuna Chana", "portion": "60g", "p": 13.5, "c": 35.0, "f": 3.2, "kcal": 225, "cost": "₹15", "type": "High Protein High Carb"},
+            {"item": "Sprouted Moong / Kala Chana Salad", "portion": "100g", "p": 8.0, "c": 20.0, "f": 0.6, "kcal": 120, "cost": "₹10", "type": "High Protein Low Fat"},
+            {"item": "Low-Fat Curd (Dahi)", "portion": "250g", "p": 10.5, "c": 12.0, "f": 3.0, "kcal": 120, "cost": "₹20", "type": "High Protein Low Fat"}
+        ],
+        "Medium Budget": [
+            {"item": "Low-Fat Paneer / Fresh Cottage Cheese", "portion": "150g", "p": 27.0, "c": 4.5, "f": 12.0, "kcal": 240, "cost": "₹60", "type": "High Protein Mid Fat"},
+            {"item": "Soy Milk / Fortified Tofu", "portion": "200g tofu", "p": 16.0, "c": 3.0, "f": 8.0, "kcal": 145, "cost": "₹45", "type": "Lactose Free / Low Carb"},
+            {"item": "Whey Protein Concentrate (1 Scoop)", "portion": "33g scoop", "p": 24.0, "c": 2.5, "f": 1.5, "kcal": 120, "cost": "₹70", "type": "High Protein Low Carb"}
+        ],
+        "Premium Budget": [
+            {"item": "Imported Whey Isolate + Greek Yogurt", "portion": "1 scoop + 100g", "p": 35.0, "c": 4.0, "f": 1.0, "kcal": 170, "cost": "₹150", "type": "High Protein Zero Fat"},
+            {"item": "Almond Butter + Organic Pumpkin Seeds", "portion": "30g each", "p": 18.0, "c": 12.0, "f": 26.0, "kcal": 350, "cost": "₹120", "type": "High Protein High Fat"}
+        ]
+    },
+    "Non-Veg": {
+        "Low Budget": [
+            {"item": "Whole Eggs (4 boiled) + 2 Whites", "portion": "6 eggs total", "p": 32.0, "c": 2.0, "f": 20.0, "kcal": 320, "cost": "₹40", "type": "High Protein Mid Fat"},
+            {"item": "Chicken Liver / Value Cuts", "portion": "150g", "p": 26.0, "c": 1.0, "f": 6.0, "kcal": 170, "cost": "₹35", "type": "High Protein Low Fat"}
+        ],
+        "Medium Budget": [
+            {"item": "Skinless Chicken Breast (Pan Seared)", "portion": "200g raw", "p": 62.0, "c": 0.0, "f": 5.0, "kcal": 310, "cost": "₹70", "type": "High Protein Low Fat Low Carb"},
+            {"item": "Canned Tuna / Local White Fish", "portion": "150g", "p": 35.0, "c": 0.0, "f": 2.0, "kcal": 160, "cost": "₹90", "type": "High Protein Low Fat"}
+        ],
+        "Premium Budget": [
+            {"item": "Atlantic Salmon Fillet / Mutton Lean Cuts", "portion": "200g", "p": 44.0, "c": 0.0, "f": 22.0, "kcal": 380, "cost": "₹350", "type": "High Protein High Healthy Fat"}
+        ]
+    }
+}
+
+# 5. Gemini AI Engine with Medical & OCR Handlers
 def run_gemini_query(payload, key):
     if not key:
         st.error("❌ Gemini API Key missing.")
@@ -174,8 +226,7 @@ def run_gemini_query(payload, key):
 def analyze_inbody_sheet_ai(pil_img: Image.Image, key: str):
     system_prompt = """
     You are an expert clinical diagnostician and OCR system specialized in medical InBody body composition printout sheets.
-    Analyze the uploaded InBody report photo and extract all biometric values accurately.
-    
+    Extract biometric values accurately from the image.
     OUTPUT STRICT JSON ONLY:
     {
       "weight_kg": float,
@@ -244,50 +295,7 @@ def analyze_nutrition_ai(user_text: str = "", pil_img: Image.Image = None, key: 
     except Exception:
         return None
 
-def analyze_physique_ai(pil_img: Image.Image, user_prof: dict, key: str):
-    system_prompt = f"""
-    You are the Lead Metabolic Diagnostician and Fitness Physiologist for KSP Consulting.
-    Analyze this user's physique photo solely for medical, postural, and athletic body composition assessment.
-    User Profile Context:
-    - Gender: {user_prof['gender']}, Weight: {user_prof['weight_kg']} kg, Height: {user_prof['height_cm']} cm, Age: {user_prof['age']} years
-    
-    CLOTHING & OCCLUSION INSTRUCTIONS:
-    - If the subject is wearing loose clothing covering the torso/waist, recognize that abdominal fat is obscured.
-    - Apply a conservative correction (+3% to +5%) to the visual estimate rather than basing body fat solely on exposed arms and shoulders.
-    - If shirtless/clear, estimate visual body fat directly from abdominal definition and waistline tightness.
-    
-    OUTPUT STRICT JSON ONLY:
-    {{
-      "estimated_body_fat_pct": float,
-      "physique_assessment": "1-2 sentence clinical and motivating breakdown of muscle structure and conditioning focal points"
-    }}
-    """
-    img_resized = pil_img.copy()
-    img_resized.thumbnail((1024, 1024))
-    raw_resp = run_gemini_query([system_prompt, img_resized], key)
-    if not raw_resp:
-        w = float(user_prof['weight_kg'])
-        h = float(user_prof['height_cm'])
-        bmi = w / ((h / 100) ** 2)
-        est_bf = round(1.20 * bmi + 0.23 * float(user_prof['age']) - 16.2, 1) if user_prof['gender'] == 'Male' else round(1.20 * bmi + 0.23 * float(user_prof['age']) - 5.4, 1)
-        est_bf = max(10.0, min(est_bf, 36.0))
-        return {
-            "estimated_body_fat_pct": est_bf,
-            "physique_assessment": f"Biometric analysis reflects a structural frame (BMI: {round(bmi,1)}) with central abdominal adiposity as the primary target."
-        }
-
-    try:
-        clean_json = raw_resp.replace("```json", "").replace("```", "").strip()
-        return json.loads(clean_json)
-    except Exception:
-        return {
-            "estimated_body_fat_pct": 26.5,
-            "physique_assessment": "The subject displays a solid foundation of clavicular width and deltoid fullness, accompanied by moderate central midsection adiposity."
-        }
-
-# 5. PDF Generation Engines
-
-# Engine A: Personal Client Fitness & Metabolic Audit
+# 6. PDF Generation Class
 class KSPFitnessPDF(FPDF):
     def header(self):
         self.set_fill_color(15, 23, 42)
@@ -444,125 +452,7 @@ def build_pdf_report(prof, meals, workouts):
 
     return bytes(pdf.output())
 
-# Engine B: Platform Overview & Commercial Pitch Deck PDF
-class KSPDeckPDF(FPDF):
-    def header(self):
-        self.set_fill_color(15, 23, 42)
-        self.rect(0, 0, 210, 28, 'F')
-        self.set_text_color(59, 130, 246)
-        self.set_font("Helvetica", "B", 10)
-        self.set_xy(14, 6)
-        self.cell(0, 5, "KSP CONSULTING & SOLUTIONS", ln=True)
-        self.set_text_color(255, 255, 255)
-        self.set_font("Helvetica", "B", 13)
-        self.set_xy(14, 12)
-        self.cell(0, 6, "FITNESS OS -- PLATFORM OVERVIEW & POSITIONING DECK", ln=True)
-        self.set_text_color(148, 163, 184)
-        self.set_font("Helvetica", "I", 8)
-        self.set_xy(14, 19)
-        self.cell(0, 4, "Strategy amplified, complexity simplified.", ln=True)
-        self.ln(12)
-
-    def footer(self):
-        self.set_y(-15)
-        self.set_font("Helvetica", "I", 8)
-        self.set_text_color(148, 163, 184)
-        self.cell(0, 10, f"Page {self.page_no()} | KSP Fitness OS Commercial Brief | Confidentially Distributed", align="C")
-
-def generate_positioning_pdf_bytes():
-    pdf = KSPDeckPDF()
-    pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=15)
-
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.set_text_color(15, 23, 42)
-    pdf.cell(0, 6, "1. THE PROBLEM IN MODERN FITNESS TRACKING", ln=True)
-    pdf.set_draw_color(59, 130, 246)
-    pdf.set_line_width(0.4)
-    pdf.line(14, pdf.get_y(), 196, pdf.get_y())
-    pdf.ln(2)
-
-    pdf.set_font("Helvetica", "", 9)
-    pdf.set_text_color(51, 65, 85)
-    pdf.multi_cell(182, 5, 
-        "Traditional fitness applications fail Indian lifters in three critical areas:\n"
-        "1. Inaccurate Indian Macro Data: Standard apps miscalculate regional cooked dishes and staple vegetarian sources (soya chunks, paneer, dals, curd).\n"
-        "2. Manual Logging Friction: Typing food weights and searching databases leads to 80% user drop-off within 14 days.\n"
-        "3. Lack of True Clinical Logic: Generic apps allow individuals with >25% body fat to enter dangerous 'bulking' phases instead of enforcing fat-loss protocols."
-    )
-    pdf.ln(3)
-
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.set_text_color(15, 23, 42)
-    pdf.cell(0, 6, "2. THE KSP FITNESS OS SOLUTION ARCHITECTURE", ln=True)
-    pdf.line(14, pdf.get_y(), 196, pdf.get_y())
-    pdf.ln(2)
-
-    pdf.set_fill_color(241, 245, 249)
-    pdf.set_font("Helvetica", "B", 9)
-    pdf.cell(50, 6, "Core Module", border=1, fill=True)
-    pdf.cell(132, 6, "Engine Capability & User Advantage", border=1, fill=True, ln=True)
-
-    pdf.set_font("Helvetica", "", 8)
-    pdf.cell(50, 6, "InBody / DEXA OCR Scanner", border=1)
-    pdf.cell(132, 6, "Extracts SMM, PBF, Visceral Fat & uses Katch-McArdle for 100% BMR precision.", border=1, ln=True)
-
-    pdf.cell(50, 6, "AI Physique Mirror Vision", border=1)
-    pdf.cell(132, 6, "Estimates visual body fat with clothing-occlusion heuristics for users without scans.", border=1, ln=True)
-
-    pdf.cell(50, 6, "Smart Macro Vision Tracker", border=1)
-    pdf.cell(132, 6, "Snaps cooked plates or scale readings; computes exact protein/carb/fat splits instantly.", border=1, ln=True)
-
-    pdf.cell(50, 6, "Clinical Protocol Guardrail", border=1)
-    pdf.cell(132, 6, "Mandatory routing: Male BF >20% locks into targeted fat loss (700 kcal deficit).", border=1, ln=True)
-
-    pdf.cell(50, 6, "Executive Client PDF Audit", border=1)
-    pdf.cell(132, 6, "Exports clinical diagnostic sheets under the KSP Consulting brand.", border=1, ln=True)
-    pdf.ln(3)
-
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.set_text_color(15, 23, 42)
-    pdf.cell(0, 6, "3. COMMERCIAL POSITIONING & SUBSCRIPTION MODEL", ln=True)
-    pdf.line(14, pdf.get_y(), 196, pdf.get_y())
-    pdf.ln(2)
-
-    pdf.set_fill_color(241, 245, 249)
-    pdf.set_font("Helvetica", "B", 9)
-    pdf.cell(40, 6, "Tier", border=1, fill=True)
-    pdf.cell(35, 6, "Pricing", border=1, fill=True)
-    pdf.cell(107, 6, "Deliverables", border=1, fill=True, ln=True)
-
-    pdf.set_font("Helvetica", "", 8)
-    pdf.cell(40, 6, "Free Beta Pass", border=1)
-    pdf.cell(35, 6, "INR 0", border=1)
-    pdf.cell(107, 6, "Persistent cloud account, daily logging, 3 AI vision scans.", border=1, ln=True)
-
-    pdf.cell(40, 6, "Pro Athlete Pass", border=1)
-    pdf.cell(35, 6, "INR 199 / mo", border=1)
-    pdf.cell(107, 6, "Unlimited InBody scans, meal photo OCR, dynamic macro recalculations.", border=1, ln=True)
-
-    pdf.cell(40, 6, "Executive Audit Pass", border=1)
-    pdf.cell(35, 6, "INR 499 / report", border=1)
-    pdf.cell(107, 6, "Full body composition assessment + Branded KSP Audit PDF report.", border=1, ln=True)
-    pdf.ln(3)
-
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.set_text_color(15, 23, 42)
-    pdf.cell(0, 6, "4. HOW TO USE THE APP (4-STEP CLIENT ONBOARDING)", ln=True)
-    pdf.line(14, pdf.get_y(), 196, pdf.get_y())
-    pdf.ln(2)
-
-    pdf.set_font("Helvetica", "", 9)
-    pdf.multi_cell(182, 5,
-        "Step 1: Sign Up on the app to create your persistent cloud account.\n"
-        "Step 2: Upload your Gym InBody Scan or Mirror Photo to lock in your clinical BMR & calorie targets.\n"
-        "Step 3: Snap photos of your meals or type regional food items to track macros effortlessly.\n"
-        "Step 4: Download your Official KSP Fitness Audit PDF at the end of each training cycle."
-    )
-
-    return bytes(pdf.output())
-
-# 6. Database Operations
+# 7. Database Operations
 def fetch_user(email):
     if supabase:
         try:
@@ -574,7 +464,7 @@ def fetch_user(email):
     return None
 
 def create_user(email, name, pw_hash):
-    init_proto = compute_clinical_metabolic_protocol(75.3, 158.5, 28, "Male", "Moderate Active (Gym 3-5 days/week)", 34.1, 49.6)
+    init_proto = compute_clinical_metabolic_protocol(75.3, 158.5, 28, "Male", "Moderate Active (Gym 3-5 days/week)", "Pure Cutting (Aggressive Fat Loss)", 34.1, 49.6)
     default_profile = {
         "name": name,
         "age": 28,
@@ -616,7 +506,7 @@ def sync_user_data(email, profile, meals, workouts):
         except Exception:
             pass
 
-# 7. Sidebar Authentication
+# 8. User Authentication State & Sidebar
 if "auth_user" not in st.session_state:
     st.session_state.auth_user = None
 
@@ -656,17 +546,17 @@ with st.sidebar:
             st.session_state.auth_user = None
             st.rerun()
 
-# 8. Main App Gate
+# 9. Main Application Workspace
 st.markdown("""
 <div class="ksp-header">
     <div class="ksp-brand">KSP Consulting & Solutions</div>
-    <div class="ksp-title">Fitness OS • Clinical Metabolic Engine</div>
-    <div class="ksp-tagline">Strategy amplified, complexity simplified.</div>
+    <div class="ksp-title">Fitness OS • Clinical Metabolic & Diet Engine</div>
+    <div class="ksp-tagline">Strategy amplified, complexity simplified. Precision Indian macros & clinical diagnostics.</div>
 </div>
 """, unsafe_allow_html=True)
 
 if not st.session_state.auth_user:
-    st.info("👋 Welcome to **KSP Fitness OS**. Please **Sign Up** or **Log In** from the sidebar to access your persistent cloud profile, InBody scanner, AI vision engine, and workout logs.")
+    st.info("👋 Welcome to **KSP Fitness OS**. Please **Sign Up** or **Log In** from the sidebar to access your persistent cloud profile, smart budget meal planner, and InBody scanner.")
     st.stop()
 
 user_record = fetch_user(st.session_state.auth_user)
@@ -678,8 +568,8 @@ prof = user_record["profile"]
 meal_logs = user_record.get("meals", [])
 workout_logs = user_record.get("workouts", [])
 
-# 9. Profile & Protocol Expander
-with st.expander("👤 User Profile & Protocol Calibration", expanded=False):
+# 10. Profile & Target Goal Customization
+with st.expander("🎯 Customize Target Goal, Biometrics & Caloric Protocol", expanded=False):
     col_u1, col_u2, col_u3 = st.columns(3)
     with col_u1:
         u_name = st.text_input("Full Name:", value=prof["name"])
@@ -695,11 +585,18 @@ with st.expander("👤 User Profile & Protocol Calibration", expanded=False):
             "Sedentary (Desk Job, minimal exercise)"
         ])
     with col_u3:
-        st.markdown(f"**Prescribed Goal:** :orange[{prof.get('goal', 'Targeted Fat Loss')}]")
+        u_goal = st.selectbox("Target Physiological Goal:", [
+            "Pure Cutting (Aggressive Fat Loss)",
+            "Body Recomposition (Build Muscle & Burn Fat)",
+            "Lean Bulk (Clean Hypertrophy)",
+            "Aggressive Bulk (Heavy Mass Gain)",
+            "Maintenance & Peak Performance"
+        ], index=0 if "Cutting" in prof.get("goal", "") else 1)
+        
         st.markdown(f"**Body Fat:** `{prof.get('body_fat_pct', 24.0)}%` | **Lean Mass:** `{prof.get('lean_mass_kg', 50.0)}kg`")
-        if st.button("⚡ Recalculate Protocol", type="primary", use_container_width=True):
+        if st.button("⚡ Apply Scientific Goal Protocol", type="primary", use_container_width=True):
             new_proto = compute_clinical_metabolic_protocol(
-                u_weight, u_height, u_age, u_gender, u_activity, prof.get("body_fat_pct"), prof.get("lean_mass_kg")
+                u_weight, u_height, u_age, u_gender, u_activity, u_goal, prof.get("body_fat_pct"), prof.get("lean_mass_kg")
             )
             prof.update({
                 "name": u_name,
@@ -711,10 +608,10 @@ with st.expander("👤 User Profile & Protocol Calibration", expanded=False):
                 **new_proto
             })
             sync_user_data(st.session_state.auth_user, prof, meal_logs, workout_logs)
-            st.success(f"Protocol Applied: {new_proto['goal']} | {new_proto['target_kcal']} kcal | {new_proto['target_p']}g Protein")
+            st.success(f"Updated: {new_proto['goal']} | {new_proto['target_kcal']} kcal | {new_proto['target_p']}g Protein")
             st.rerun()
 
-# 10. Real-Time Top Macro Dashboard
+# 11. Top Real-Time Macro Tracker
 df_meals = pd.DataFrame(meal_logs)
 curr_kcal = int(df_meals["kcal"].sum()) if not df_meals.empty else 0
 curr_p = round(float(df_meals["p"].sum()), 1) if not df_meals.empty else 0.0
@@ -727,13 +624,76 @@ col2.metric("Protein", f"{curr_p} g", f"{round(prof['target_p'] - curr_p, 1)}g t
 col3.metric("Carbs", f"{curr_c} g", f"Target: {prof['target_c']}g")
 col4.metric("Fats", f"{curr_f} g", f"Target: {prof['target_f']}g")
 
+# Interactive Progress Bars
+p_prog = min(1.0, max(0.0, curr_p / max(1, prof['target_p'])))
+k_prog = min(1.0, max(0.0, curr_kcal / max(1, prof['target_kcal'])))
+c_prog1, c_prog2 = st.columns(2)
+with c_prog1:
+    st.caption(f"Protein Progress: {int(p_prog*100)}% ({curr_p}g / {prof['target_p']}g)")
+    st.progress(p_prog)
+with c_prog2:
+    st.caption(f"Calorie Burn/Budget: {int(k_prog*100)}% ({curr_kcal} / {prof['target_kcal']} kcal)")
+    st.progress(k_prog)
+
 st.write("---")
 
-# 11. Dual-Column Workstation
+# 12. Smart Diet Recommendation & Recipe Architect
+st.subheader("🥗 Smart Indian Diet & Budget Recommendation Engine")
+st.markdown("*Select your diet type, budget, and allergies to instantly get tailored meal combinations that match your daily protein target.*")
+
+col_d1, col_d2, col_d3 = st.columns(3)
+with col_d1:
+    sel_diet = st.selectbox("Diet Type:", ["Pure Veg", "Non-Veg", "Both / Flexitarian"])
+with col_d2:
+    sel_budget = st.selectbox("Budget Tier:", ["Low Budget", "Medium Budget", "Premium Budget"])
+with col_d3:
+    sel_allergy = st.selectbox("Dairy / Allergies:", ["Regular (Dairy OK)", "Lactose-Free (No Milk/Paneer)", "Nut-Free"])
+
+# Fetch Recommendation Options
+primary_key = "Non-Veg" if sel_diet == "Non-Veg" else "Pure Veg"
+suggested_items = FOOD_LIBRARY.get(primary_key, {}).get(sel_budget, [])
+
+if sel_allergy == "Lactose-Free (No Milk/Paneer)":
+    suggested_items = [item for item in suggested_items if "Paneer" not in item["item"] and "Curd" not in item["item"]]
+
+cols_rec = st.columns(len(suggested_items) if suggested_items else 1)
+for idx, food in enumerate(suggested_items):
+    with cols_rec[idx]:
+        st.markdown(f"""
+        <div class="diet-card">
+            <span style="color: #3B82F6; font-size: 11px; font-weight: bold; text-transform: uppercase;">{food['type']}</span>
+            <div style="font-weight: 800; font-size: 14px; margin-top: 4px; color: #FFFFFF;">{food['item']}</div>
+            <div style="color: #94A3B8; font-size: 12px; margin-bottom: 8px;">Portion: <b>{food['portion']}</b> | Est. Cost: <b style="color: #10B981;">{food['cost']}</b></div>
+            <div style="font-size: 13px; color: #E2E8F0;">
+                🥩 <b>{food['p']}g</b> Protein<br>
+                🍚 <b>{food['c']}g</b> Carbs<br>
+                🥑 <b>{food['f']}g</b> Fats<br>
+                ⚡ <b>{food['kcal']}</b> kcal
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button(f"+ Log This Meal", key=f"quick_log_{idx}", use_container_width=True):
+            meal_logs.insert(0, {
+                "item": f"{food['item']} ({food['portion']})",
+                "grams": 150,
+                "kcal": food['kcal'],
+                "p": food['p'],
+                "c": food['c'],
+                "f": food['f'],
+                "source": "Smart Budget Recommendation",
+                "time": datetime.now().strftime("%I:%M %p")
+            })
+            sync_user_data(st.session_state.auth_user, prof, meal_logs, workout_logs)
+            st.success(f"Logged {food['item']}!")
+            st.rerun()
+
+st.write("---")
+
+# 13. Dual Workstation (Food Scanner & Body Composition)
 left_col, right_col = st.columns([1, 1], gap="large")
 
 with left_col:
-    st.subheader("🥗 Smart Macro & Food Engine")
+    st.subheader("📸 Smart Meal AI Vision & Prompt")
     tab_text, tab_photo = st.tabs(["⚡ Direct Text Prompt", "📷 Plate / Label Scanner"])
     
     with tab_text:
@@ -774,15 +734,15 @@ with left_col:
         st.info("No meals logged yet today.")
 
 with right_col:
-    st.subheader("🏋️ Body Composition & Training OS")
-    tab_inbody, tab_physique, tab_workout = st.tabs(["📄 Scan InBody Sheet", "📸 Mirror Photo Scan", "📝 Workout Log"])
+    st.subheader("🏋️ Clinical Body Composition & Training OS")
+    tab_inbody, tab_workout = st.tabs(["📄 Scan InBody Printout", "📝 Workout Log"])
     
     with tab_inbody:
-        st.markdown("#### Upload Gym InBody / DEXA Printout")
+        st.markdown("#### Upload Gym InBody / DEXA Sheet")
         inbody_file = st.file_uploader("Upload high-res photo of your InBody report:", type=["jpg", "png", "jpeg"], key="inbody_uploader")
         if inbody_file:
             in_img = Image.open(inbody_file)
-            st.image(in_img, caption="InBody Report Preview", width=280)
+            st.image(in_img, caption="InBody Report Preview", width=260)
             if st.button("⚡ Run InBody Clinical OCR Scan", type="primary", use_container_width=True):
                 with st.spinner("AI OCR reading clinical metrics (SMM, PBF, Visceral Fat, BMR)..."):
                     in_data = analyze_inbody_sheet_ai(in_img, API_KEY)
@@ -795,7 +755,7 @@ with right_col:
                         score_val = in_data.get("inbody_score", 66)
                         
                         updated_proto = compute_clinical_metabolic_protocol(
-                            w_val, prof["height_cm"], prof["age"], prof["gender"], prof["activity"], pbf_val, ffm_val
+                            w_val, prof["height_cm"], prof["age"], prof["gender"], prof["activity"], prof["goal"], pbf_val, ffm_val
                         )
                         
                         prof.update({
@@ -817,32 +777,6 @@ with right_col:
 
         if prof.get("inbody_score"):
             st.markdown(f"> **InBody Score:** `{prof.get('inbody_score')}/100` | **Visceral Fat:** `Level {prof.get('visceral_fat_level')}` | **SMM:** `{prof.get('smm_kg')}kg`")
-
-    with tab_physique:
-        st.markdown("#### Upload Mirror Physique Photo")
-        uploaded_physique = st.file_uploader("Upload full-torso front/back photo:", type=["jpg", "png", "jpeg"], key="body_uploader")
-        if uploaded_physique:
-            p_img = Image.open(uploaded_physique)
-            st.image(p_img, caption="Physique Upload", width=240)
-            if st.button("⚡ Run Body Fat & Muscle Scan", type="primary", use_container_width=True):
-                with st.spinner("Analyzing muscularity, abdominal definition, and body fat..."):
-                    scan = analyze_physique_ai(p_img, prof, API_KEY)
-                    if scan:
-                        new_bf = scan.get("estimated_body_fat_pct", 24.0)
-                        updated_proto = compute_clinical_metabolic_protocol(
-                            prof["weight_kg"], prof["height_cm"], prof["age"], prof["gender"], prof["activity"], new_bf
-                        )
-                        prof.update({
-                            "assessment_notes": scan.get("physique_assessment", ""),
-                            **updated_proto
-                        })
-                        sync_user_data(st.session_state.auth_user, prof, meal_logs, workout_logs)
-                        st.success(f"Body Fat: {new_bf}% -> Auto-Routed to: {updated_proto['goal']}")
-                        c_bf1, c_bf2, c_bf3 = st.columns(3)
-                        c_bf1.metric("Body Fat %", f"{new_bf}%")
-                        c_bf2.metric("Lean Muscle", f"{updated_proto['lean_mass_kg']} kg")
-                        c_bf3.metric("Fat Mass", f"{updated_proto['fat_mass_kg']} kg")
-                        st.rerun()
 
     with tab_workout:
         st.markdown("#### Log Training Set")
@@ -886,11 +820,12 @@ with right_col:
 
 st.write("---")
 
-# 12. Client Executive PDF Export & Platform Deck
-st.subheader("📄 Client Executive Export & Platform Overview")
-pdf_col1, pdf_col2 = st.columns([1, 1])
-
+# 14. Executive Client Export
+st.subheader("📄 Client Executive Export")
+pdf_col1, pdf_col2 = st.columns([2, 1])
 with pdf_col1:
+    st.write("Download your official, confidential KSP Metabolic Audit PDF containing your exact calorie target, clinical InBody metrics, logged meals, and workout performance.")
+with pdf_col2:
     pdf_bytes = build_pdf_report(prof, meal_logs, workout_logs)
     st.download_button(
         label="📥 Download My Fitness Audit (PDF)",
@@ -898,15 +833,5 @@ with pdf_col1:
         file_name=f"KSP_Fitness_Audit_{prof['name']}_{datetime.now().strftime('%Y%m%d')}.pdf",
         mime="application/pdf",
         type="primary",
-        use_container_width=True
-    )
-
-with pdf_col2:
-    deck_bytes = generate_positioning_pdf_bytes()
-    st.download_button(
-        label="📑 Download Platform Guide & Pricing Deck (PDF)",
-        data=deck_bytes,
-        file_name="KSP_Fitness_OS_Platform_Guide.pdf",
-        mime="application/pdf",
         use_container_width=True
     )
