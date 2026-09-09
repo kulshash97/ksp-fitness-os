@@ -95,7 +95,6 @@ def compute_clinical_metabolic_protocol(weight_kg, height_cm, age_yrs, gender, a
     age_yrs = int(age_yrs)
     body_fat_pct = float(body_fat_pct)
 
-    # 1. Exact Biometric Arithmetic
     if body_fat_mass_kg is not None and float(body_fat_mass_kg) > 0:
         fat_mass = round(float(body_fat_mass_kg), 2)
         lean_mass = round(weight_kg - fat_mass, 2)
@@ -103,7 +102,6 @@ def compute_clinical_metabolic_protocol(weight_kg, height_cm, age_yrs, gender, a
         fat_mass = round(weight_kg * (body_fat_pct / 100.0), 2)
         lean_mass = round(weight_kg - fat_mass, 2)
 
-    # 2. Clinical BMR: Katch-McArdle using Lean Mass
     if lean_mass > 0:
         bmr = 370.0 + (21.6 * lean_mass)
     else:
@@ -121,7 +119,6 @@ def compute_clinical_metabolic_protocol(weight_kg, height_cm, age_yrs, gender, a
     multiplier = act_multipliers.get(activity_str, 1.55)
     tdee = bmr * multiplier
 
-    # 3. Deficit Allocation
     if "Pure Cutting" in goal_choice or "Aggressive Fat Loss" in goal_choice or body_fat_pct >= 25.0:
         target_calories = 1450.0
         protein_g = 130.0
@@ -159,7 +156,7 @@ def compute_clinical_metabolic_protocol(weight_kg, height_cm, age_yrs, gender, a
         "body_fat_pct": round(body_fat_pct, 1),
         "fat_mass_kg": fat_mass,
         "lean_mass_kg": lean_mass,
-        "smm_kg": round(float(smm_kg), 1) if smm_kg is not None else 29.7,
+        "smm_kg": round(float(smm_kg), 1) if smm_kg is not None else 0.0,
         "goal": prescribed_goal,
         "target_kcal": int(round(target_calories)),
         "target_p": int(round(protein_g)),
@@ -183,7 +180,7 @@ DAILY_MEAL_PLANS = {
             {"meal": "Dinner", "item": "Soya Chunks (60g dry) + Low-Fat Paneer (100g) Bhurji Bowl", "p": 48.0, "c": 22.0, "f": 11.0, "kcal": 379, "cost": "₹65"}
         ],
         "Premium Budget": [
-            {"meal": "Breakfast", "item": "Whey Isolate (1.5 Scoops) + Epigamia Greek Yogurt (200g)", "p": 50.0, "c": 14.0, "f": 3.0, "kcal": 283, "cost": "₹190"},
+            {"meal": "Breakfast", "item": "Whey Isolate (1.5 Scoops) + Greek Yogurt (200g)", "p": 50.0, "c": 14.0, "f": 3.0, "kcal": 283, "cost": "₹190"},
             {"meal": "Lunch", "item": "Grilled Low-Fat Paneer (250g) with Steamed Broccoli & Quinoa", "p": 50.0, "c": 36.0, "f": 18.0, "kcal": 506, "cost": "₹130"},
             {"meal": "Snack", "item": "Organic Almond Butter (30g) + Unsweetened Soy Milk (250ml)", "p": 16.0, "c": 12.0, "f": 18.0, "kcal": 274, "cost": "₹95"},
             {"meal": "Dinner", "item": "Organic Tofu (300g) Stir-Fry with Edamame & Mushrooms", "p": 42.0, "c": 20.0, "f": 14.0, "kcal": 374, "cost": "₹150"}
@@ -245,7 +242,7 @@ DAILY_MEAL_PLANS = {
         "Premium Budget": [
             {"meal": "Breakfast", "item": "Whey Isolate Shake (1.5 Scoops) + 4 Poached Egg Whites", "p": 50.0, "c": 2.0, "f": 1.5, "kcal": 222, "cost": "₹160"},
             {"meal": "Lunch", "item": "Grilled Chicken Breast (250g) with Hass Avocado Salad", "p": 76.0, "c": 8.0, "f": 16.0, "kcal": 480, "cost": "₹130"},
-            {"meal": "Snack", "item": "Epigamia Greek Yogurt (200g) + Raw Almonds (25g)", "p": 22.0, "c": 14.0, "f": 14.0, "kcal": 270, "cost": "₹100"},
+            {"meal": "Snack", "item": "Greek Yogurt (200g) + Raw Almonds (25g)", "p": 22.0, "c": 14.0, "f": 14.0, "kcal": 270, "cost": "₹100"},
             {"meal": "Dinner", "item": "Atlantic Salmon Fillet (220g) with Steamed Asparagus", "p": 48.0, "c": 2.0, "f": 24.0, "kcal": 416, "cost": "₹380"}
         ]
     }
@@ -286,7 +283,7 @@ def extract_inbody_ocr_fast(pil_img: Image.Image, key: str):
     - Look for 'Weight' (e.g., 75.9 or 75.3)
     - Look for 'SMM' or 'Skeletal Muscle Mass' (e.g., 29.7)
     - Look for 'Body Fat Mass' (e.g., 23.1)
-    - Look for 'PBF' or 'Percent Body Fat' (e.g., 30.5). DO NOT extract 22% unless printed.
+    - Look for 'PBF' or 'Percent Body Fat' (e.g., 30.5).
     - Look for 'BMR' (e.g., 1510)
     - Look for 'Visceral Fat Level' (e.g., 10)
     - Look for 'InBody Score' (e.g., 72)
@@ -308,13 +305,11 @@ def extract_inbody_ocr_fast(pil_img: Image.Image, key: str):
       "inbody_score": integer
     }
     """
-    # Normalize EXIF orientation to ensure image is upright
     img_corrected = ImageOps.exif_transpose(pil_img)
     img_corrected.thumbnail((2048, 2048))
 
     raw_resp = run_gemini_query([system_prompt, img_corrected], key, json_mode=True)
     if not raw_resp:
-        # Retry with standard mode
         raw_resp = run_gemini_query([system_prompt, img_corrected], key, json_mode=False)
 
     if not raw_resp:
@@ -416,24 +411,24 @@ def build_pdf_report(prof, meals, workouts):
     pdf.set_text_color(30, 41, 59)
     col_w = 45.5
 
-    pdf.cell(col_w, 6, f" Age: {prof.get('age', 28)} yrs", border=1)
+    pdf.cell(col_w, 6, f" Age: {prof.get('age', 25)} yrs", border=1)
     pdf.cell(col_w, 6, f" Gender: {prof.get('gender', 'Male')}", border=1)
-    pdf.cell(col_w, 6, f" Height: {prof.get('height_cm', 159.0)} cm", border=1)
-    pdf.cell(col_w, 6, f" Weight: {prof.get('weight_kg', 75.9)} kg", border=1, ln=True)
+    pdf.cell(col_w, 6, f" Height: {prof.get('height_cm', 170.0)} cm", border=1)
+    pdf.cell(col_w, 6, f" Weight: {prof.get('weight_kg', 70.0)} kg", border=1, ln=True)
 
-    bf_text = f"{prof.get('body_fat_pct', 30.5)}%"
-    lean_text = f"{prof.get('lean_mass_kg', 52.8)} kg"
-    fat_text = f"{prof.get('fat_mass_kg', 23.1)} kg"
-    smm_text = f"{prof.get('smm_kg', 29.7)} kg"
+    bf_text = f"{prof.get('body_fat_pct', 20.0)}%"
+    lean_text = f"{prof.get('lean_mass_kg', 56.0)} kg"
+    fat_text = f"{prof.get('fat_mass_kg', 14.0)} kg"
+    smm_text = f"{prof.get('smm_kg', 0.0)} kg"
 
     pdf.cell(col_w, 6, f" Body Fat: {bf_text}", border=1)
     pdf.cell(col_w, 6, f" Lean Mass: {lean_text}", border=1)
     pdf.cell(col_w, 6, f" Fat Mass: {fat_text}", border=1)
     pdf.cell(col_w, 6, f" Muscle (SMM): {smm_text}", border=1, ln=True)
 
-    v_level = f"Level {prof.get('visceral_fat_level', 10)}"
-    score_val = f"{prof.get('inbody_score', 72)}/100"
-    bmr_val = f"{prof.get('bmr', 1510)} kcal"
+    v_level = f"Level {prof.get('visceral_fat_level', 0)}"
+    score_val = f"{prof.get('inbody_score', 0)}/100"
+    bmr_val = f"{prof.get('bmr', 1500)} kcal"
     pdf.cell(col_w, 6, f" InBody Score: {score_val}", border=1)
     pdf.cell(col_w, 6, f" Visceral Fat: {v_level}", border=1)
     pdf.cell(col_w, 6, f" Clinical BMR: {bmr_val}", border=1)
@@ -542,25 +537,34 @@ def fetch_user(email):
 
 def create_user(email, name, pw_hash):
     clean_name = name.strip().title()
+    # Clean neutral defaults for every newly created user profile
+    default_wt = 70.0
+    default_ht = 170.0
+    default_age = 25
+    default_gender = "Male"
+    default_act = "Moderate Active (Gym 3-5 days/week)"
+    default_goal = "Body Recomposition (Build Muscle & Burn Fat)"
+    default_bf = 20.0
+
     init_proto = compute_clinical_metabolic_protocol(
-        75.9, 159.0, 28, "Male", "Moderate Active (Gym 3-5 days/week)",
-        "Pure Cutting (Aggressive Fat Loss)", body_fat_pct=30.5, smm_kg=29.7, body_fat_mass_kg=23.1
+        default_wt, default_ht, default_age, default_gender, default_act,
+        default_goal, body_fat_pct=default_bf, smm_kg=0.0
     )
     new_user_profile = {
         "name": clean_name,
-        "age": 28,
-        "gender": "Male",
-        "weight_kg": 75.9,
-        "height_cm": 159.0,
-        "activity": "Moderate Active (Gym 3-5 days/week)",
-        "goal": "Pure Cutting (Aggressive Fat Loss)",
-        "inbody_score": 72,
-        "visceral_fat_level": 10,
-        "smm_kg": 29.7,
-        "body_fat_pct": 30.5,
-        "fat_mass_kg": 23.1,
-        "lean_mass_kg": 52.8,
-        "assessment_notes": "Validated InBody scan shows 30.5% body fat with 29.7kg SMM. Prescribed active fat-loss protocol targeting ~1kg pure fat loss/week.",
+        "age": default_age,
+        "gender": default_gender,
+        "weight_kg": default_wt,
+        "height_cm": default_ht,
+        "activity": default_act,
+        "goal": default_goal,
+        "inbody_score": 0,
+        "visceral_fat_level": 0,
+        "smm_kg": 0.0,
+        "body_fat_pct": default_bf,
+        "fat_mass_kg": round(default_wt * (default_bf / 100.0), 2),
+        "lean_mass_kg": round(default_wt - (default_wt * default_bf / 100.0), 2),
+        "assessment_notes": "Profile initialized. Upload your InBody report or mirror photo to calibrate clinical targets.",
         **init_proto
     }
     if supabase:
@@ -611,6 +615,7 @@ with st.sidebar:
                         st.error("Account already exists. Please Log In.")
                     else:
                         if create_user(u_email, u_fullname, hash_pw(u_pass)):
+                            st.session_state.clear()
                             st.session_state.auth_user = u_email
                             st.rerun()
                 else:
@@ -619,6 +624,7 @@ with st.sidebar:
             if st.button("🔑 Log In", type="primary", use_container_width=True):
                 user_db = fetch_user(u_email)
                 if user_db and user_db["password_hash"] == hash_pw(u_pass):
+                    st.session_state.clear()
                     st.session_state.auth_user = u_email
                     st.rerun()
                 else:
@@ -628,7 +634,7 @@ with st.sidebar:
         st.markdown(f"**Athlete:** `{user_record['name'] if user_record else 'User'}`")
         st.markdown(f"**Plan:** :green[{user_record.get('subscription_status', 'Free Beta') if user_record else 'Free'}]")
         if st.button("Logout", use_container_width=True):
-            st.session_state.auth_user = None
+            st.session_state.clear()
             st.rerun()
 
 # 9. Main Application Workspace
@@ -641,7 +647,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 if not st.session_state.auth_user:
-    st.info("👋 Welcome to **KSP Fitness OS**. Please **Sign Up** or **Log In** from the sidebar to access your profile, InBody scanner, and customized diet planner.")
+    st.info("👋 Welcome to **KSP Fitness OS**. Please **Sign Up** or **Log In** from the sidebar to access your private athlete profile, InBody scanner, and customized diet planner.")
     st.stop()
 
 user_record = fetch_user(st.session_state.auth_user)
@@ -654,13 +660,21 @@ meal_logs = user_record.get("meals", [])
 workout_logs = user_record.get("workouts", [])
 u_id = st.session_state.auth_user
 
-# Biometric variables guaranteed from profile
-curr_wt = float(prof.get("weight_kg", 75.9))
-curr_ht = float(prof.get("height_cm", 159.0))
-curr_age = int(prof.get("age", 28))
-curr_bf = float(prof.get("body_fat_pct", 30.5))
-curr_smm = float(prof.get("smm_kg", 29.7))
+# Pull biometrics directly from the current user's profile
+curr_wt = float(prof.get("weight_kg", 70.0))
+curr_ht = float(prof.get("height_cm", 170.0))
+curr_age = int(prof.get("age", 25))
+curr_bf = float(prof.get("body_fat_pct", 20.0))
+curr_smm = float(prof.get("smm_kg", 0.0))
 curr_lean = float(prof.get("lean_mass_kg", round(curr_wt - (curr_wt * curr_bf / 100.0), 1)))
+
+# Initialize session state strictly for this user if absent
+if f"prof_wt_{u_id}" not in st.session_state:
+    st.session_state[f"prof_wt_{u_id}"] = curr_wt
+if f"prof_ht_{u_id}" not in st.session_state:
+    st.session_state[f"prof_ht_{u_id}"] = curr_ht
+if f"prof_age_{u_id}" not in st.session_state:
+    st.session_state[f"prof_age_{u_id}"] = curr_age
 
 # 10. Profile & Target Goal Customization
 with st.expander("👤 Athlete Biometrics & Clinical Target Protocols", expanded=False):
@@ -668,10 +682,10 @@ with st.expander("👤 Athlete Biometrics & Clinical Target Protocols", expanded
     with col_u1:
         u_name = st.text_input("Full Name:", value=str(prof.get("name", "")), key=f"prof_name_{u_id}")
         u_gender = st.selectbox("Gender:", ["Male", "Female"], index=0 if prof.get("gender") == "Male" else 1, key=f"prof_gender_{u_id}")
-        u_age = st.number_input("Age (years):", min_value=12, max_value=90, value=curr_age, key=f"prof_age_{u_id}")
+        u_age = st.number_input("Age (years):", min_value=12, max_value=90, key=f"prof_age_{u_id}")
     with col_u2:
-        u_weight = st.number_input("Weight (kg):", min_value=30.0, max_value=250.0, value=curr_wt, step=0.1, key=f"prof_wt_{u_id}")
-        u_height = st.number_input("Height (cm):", min_value=100.0, max_value=240.0, value=curr_ht, step=0.1, key=f"prof_ht_{u_id}")
+        u_weight = st.number_input("Weight (kg):", min_value=30.0, max_value=250.0, step=0.1, key=f"prof_wt_{u_id}")
+        u_height = st.number_input("Height (cm):", min_value=100.0, max_value=240.0, step=0.1, key=f"prof_ht_{u_id}")
 
         act_opts = [
             "Moderate Active (Gym 3-5 days/week)",
@@ -690,7 +704,7 @@ with st.expander("👤 Athlete Biometrics & Clinical Target Protocols", expanded
             "Aggressive Bulk (Heavy Mass Gain)",
             "Maintenance & Peak Performance"
         ]
-        curr_goal = prof.get("goal", goal_opts[0])
+        curr_goal = prof.get("goal", goal_opts[1])
         goal_idx = 0
         for i, g in enumerate(goal_opts):
             if g.split()[0] in curr_goal:
@@ -874,7 +888,7 @@ with right_col:
             in_img = Image.open(inbody_file)
             in_img_display = ImageOps.exif_transpose(in_img)
             st.image(in_img_display, caption="InBody Report Preview (Auto-Oriented)", width=260)
-            
+
             if st.button("⚡ Run InBody Clinical OCR Scan", type="primary", use_container_width=True, key=f"btn_ocr_{u_id}"):
                 with st.spinner("AI OCR analyzing InBody 260S table metrics..."):
                     in_data = extract_inbody_ocr_fast(in_img, API_KEY)
@@ -883,8 +897,8 @@ with right_col:
                         h_val = float(in_data.get("height_cm", curr_ht))
                         age_val = int(in_data.get("age", curr_age))
                         gender_val = in_data.get("gender", prof.get("gender", "Male"))
-                        smm_val = float(in_data.get("smm_kg", 29.7))
-                        pbf_val = float(in_data.get("body_fat_pct", 30.5))
+                        smm_val = float(in_data.get("smm_kg", curr_smm))
+                        pbf_val = float(in_data.get("body_fat_pct", curr_bf))
                         bfm_val = float(in_data.get("body_fat_mass_kg", round(w_val * (pbf_val / 100.0), 2)))
                         v_fat = int(in_data.get("visceral_fat_level", 10))
                         score_val = int(in_data.get("inbody_score", 72))
@@ -912,7 +926,6 @@ with right_col:
                             **updated_proto
                         })
 
-                        # Invalidate stale input widget state
                         for k in [f"prof_wt_{u_id}", f"prof_ht_{u_id}", f"prof_age_{u_id}", f"prof_goal_{u_id}"]:
                             if k in st.session_state:
                                 del st.session_state[k]
@@ -932,13 +945,13 @@ with right_col:
         st.caption("Apply exact clinical figures directly from your paper printout without waiting on network uploads.")
         c_m1, c_m2 = st.columns(2)
         with c_m1:
-            in_w = st.number_input("InBody Weight (kg):", value=75.9, step=0.1, key=f"cal_w_{u_id}")
-            in_smm = st.number_input("InBody SMM (kg):", value=29.7, step=0.1, key=f"cal_smm_{u_id}")
-            in_pbf = st.number_input("InBody PBF / Fat %:", value=30.5, step=0.1, key=f"cal_pbf_{u_id}")
+            in_w = st.number_input("InBody Weight (kg):", value=curr_wt, step=0.1, key=f"cal_w_{u_id}")
+            in_smm = st.number_input("InBody SMM (kg):", value=curr_smm, step=0.1, key=f"cal_smm_{u_id}")
+            in_pbf = st.number_input("InBody PBF / Fat %:", value=curr_bf, step=0.1, key=f"cal_pbf_{u_id}")
         with c_m2:
-            in_score = st.number_input("InBody Score:", value=72, step=1, key=f"cal_score_{u_id}")
-            in_vfat = st.number_input("Visceral Fat Level:", value=10, step=1, key=f"cal_vfat_{u_id}")
-            in_bfm = st.number_input("Body Fat Mass (kg):", value=23.1, step=0.1, key=f"cal_bfm_{u_id}")
+            in_score = st.number_input("InBody Score:", value=int(prof.get("inbody_score", 72)), step=1, key=f"cal_score_{u_id}")
+            in_vfat = st.number_input("Visceral Fat Level:", value=int(prof.get("visceral_fat_level", 10)), step=1, key=f"cal_vfat_{u_id}")
+            in_bfm = st.number_input("Body Fat Mass (kg):", value=float(prof.get("fat_mass_kg", round(curr_wt * (curr_bf / 100.0), 2))), step=0.1, key=f"cal_bfm_{u_id}")
 
         if st.button("🔒 Calibrate Profile with InBody Sheet Numbers", type="primary", use_container_width=True, key=f"btn_force_cal_{u_id}"):
             updated_proto = compute_clinical_metabolic_protocol(
@@ -963,7 +976,7 @@ with right_col:
                 if k in st.session_state:
                     del st.session_state[k]
             sync_user_data(st.session_state.auth_user, prof, meal_logs, workout_logs)
-            st.success("✅ Profile calibrated to exact InBody parameters (75.9kg, 30.5% BF, 29.7kg SMM, 1450 kcal).")
+            st.success(f"✅ Profile calibrated to exact InBody parameters ({in_w}kg, {in_pbf}% BF, {in_smm}kg SMM, 1450 kcal).")
             st.rerun()
 
     with tab_workout:
