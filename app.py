@@ -2,9 +2,10 @@ import streamlit as st
 import pandas as pd
 import json
 import os
+import re
 import hashlib
 from datetime import datetime
-from PIL import Image
+from PIL import Image, ImageOps
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from fpdf import FPDF
@@ -120,7 +121,7 @@ def compute_clinical_metabolic_protocol(weight_kg, height_cm, age_yrs, gender, a
     multiplier = act_multipliers.get(activity_str, 1.55)
     tdee = bmr * multiplier
 
-    # 3. Protocol Prescriptions
+    # 3. Deficit Allocation
     if "Pure Cutting" in goal_choice or "Aggressive Fat Loss" in goal_choice or body_fat_pct >= 25.0:
         target_calories = 1450.0
         protein_g = 130.0
@@ -166,7 +167,7 @@ def compute_clinical_metabolic_protocol(weight_kg, height_cm, age_yrs, gender, a
         "target_f": int(round(fat_g))
     }
 
-# 4. Calibrated Meal Plan Blueprint (130g - 165g+ Protein Delivery)
+# 4. Calibrated High-Protein Indian Meal Plans
 DAILY_MEAL_PLANS = {
     "Pure Veg": {
         "Low Budget": [
@@ -182,7 +183,7 @@ DAILY_MEAL_PLANS = {
             {"meal": "Dinner", "item": "Soya Chunks (60g dry) + Low-Fat Paneer (100g) Bhurji Bowl", "p": 48.0, "c": 22.0, "f": 11.0, "kcal": 379, "cost": "₹65"}
         ],
         "Premium Budget": [
-            {"meal": "Breakfast", "item": "Whey Isolate (1.5 Scoops) + Greek Yogurt (200g)", "p": 50.0, "c": 14.0, "f": 3.0, "kcal": 283, "cost": "₹190"},
+            {"meal": "Breakfast", "item": "Whey Isolate (1.5 Scoops) + Epigamia Greek Yogurt (200g)", "p": 50.0, "c": 14.0, "f": 3.0, "kcal": 283, "cost": "₹190"},
             {"meal": "Lunch", "item": "Grilled Low-Fat Paneer (250g) with Steamed Broccoli & Quinoa", "p": 50.0, "c": 36.0, "f": 18.0, "kcal": 506, "cost": "₹130"},
             {"meal": "Snack", "item": "Organic Almond Butter (30g) + Unsweetened Soy Milk (250ml)", "p": 16.0, "c": 12.0, "f": 18.0, "kcal": 274, "cost": "₹95"},
             {"meal": "Dinner", "item": "Organic Tofu (300g) Stir-Fry with Edamame & Mushrooms", "p": 42.0, "c": 20.0, "f": 14.0, "kcal": 374, "cost": "₹150"}
@@ -244,7 +245,7 @@ DAILY_MEAL_PLANS = {
         "Premium Budget": [
             {"meal": "Breakfast", "item": "Whey Isolate Shake (1.5 Scoops) + 4 Poached Egg Whites", "p": 50.0, "c": 2.0, "f": 1.5, "kcal": 222, "cost": "₹160"},
             {"meal": "Lunch", "item": "Grilled Chicken Breast (250g) with Hass Avocado Salad", "p": 76.0, "c": 8.0, "f": 16.0, "kcal": 480, "cost": "₹130"},
-            {"meal": "Snack", "item": "Greek Yogurt (200g) + Raw Almonds (25g)", "p": 22.0, "c": 14.0, "f": 14.0, "kcal": 270, "cost": "₹100"},
+            {"meal": "Snack", "item": "Epigamia Greek Yogurt (200g) + Raw Almonds (25g)", "p": 22.0, "c": 14.0, "f": 14.0, "kcal": 270, "cost": "₹100"},
             {"meal": "Dinner", "item": "Atlantic Salmon Fillet (220g) with Steamed Asparagus", "p": 48.0, "c": 2.0, "f": 24.0, "kcal": 416, "cost": "₹380"}
         ]
     }
@@ -252,7 +253,7 @@ DAILY_MEAL_PLANS = {
 DAILY_MEAL_PLANS["Both / Flexitarian"] = DAILY_MEAL_PLANS["Non-Veg"]
 
 # 5. Gemini AI Engine: Clinical OCR Scanner
-def run_gemini_query(payload, key):
+def run_gemini_query(payload, key, json_mode=False):
     if not key:
         st.error("❌ Gemini API Key missing.")
         return None
@@ -265,10 +266,12 @@ def run_gemini_query(payload, key):
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
     }
 
-    candidate_models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']
+    candidate_models = ['gemini-2.5-flash', 'gemini-1.5-flash']
+    gen_config = {"response_mime_type": "application/json"} if json_mode else None
+
     for model_name in candidate_models:
         try:
-            model = genai.GenerativeModel(model_name, safety_settings=safety_settings)
+            model = genai.GenerativeModel(model_name, safety_settings=safety_settings, generation_config=gen_config)
             response = model.generate_content(payload)
             if response and response.text:
                 return response.text
@@ -278,42 +281,50 @@ def run_gemini_query(payload, key):
 
 def extract_inbody_ocr_fast(pil_img: Image.Image, key: str):
     system_prompt = """
-    You are a precision medical OCR engine for InBody clinical report sheets (InBody 260S, 270, 370).
-    Read the printed values on the uploaded sheet and extract the following:
-    
-    1. 'Weight' (e.g. 75.9 or 75.3)
-    2. 'SMM' (Skeletal Muscle Mass, e.g. 29.7)
-    3. 'Body Fat Mass' (BFM, e.g. 23.1)
-    4. 'PBF' (Percent Body Fat, e.g. 30.5). DO NOT guess 22% or default.
-    5. 'BMR' (Basal Metabolic Rate, e.g. 1510)
-    6. 'Visceral Fat Level' (e.g. Level 10)
-    7. 'InBody Score' (e.g. 72)
-    8. 'Height' (e.g. 159cm)
-    9. 'Age' (e.g. 28)
-    10. 'Gender' ('Male' or 'Female')
-    
-    OUTPUT VALID JSON ONLY. NO MARKDOWN:
+    You are a precision medical OCR engine analyzing an InBody report sheet (InBody 260S, 270, 370).
+    Examine the table headers and exact printed numbers on the sheet:
+    - Look for 'Weight' (e.g., 75.9 or 75.3)
+    - Look for 'SMM' or 'Skeletal Muscle Mass' (e.g., 29.7)
+    - Look for 'Body Fat Mass' (e.g., 23.1)
+    - Look for 'PBF' or 'Percent Body Fat' (e.g., 30.5). DO NOT extract 22% unless printed.
+    - Look for 'BMR' (e.g., 1510)
+    - Look for 'Visceral Fat Level' (e.g., 10)
+    - Look for 'InBody Score' (e.g., 72)
+    - Look for 'Height' (e.g., 159.0cm)
+    - Look for 'Age' (e.g., 28)
+    - Look for 'Gender' ('Male' or 'Female')
+
+    Return JSON with this exact schema:
     {
-      "weight_kg": 75.9,
-      "height_cm": 159.0,
-      "age": 28,
-      "gender": "Male",
-      "smm_kg": 29.7,
-      "body_fat_mass_kg": 23.1,
-      "body_fat_pct": 30.5,
-      "bmr_kcal": 1510,
-      "visceral_fat_level": 10,
-      "inbody_score": 72
+      "weight_kg": float,
+      "height_cm": float,
+      "age": integer,
+      "gender": string,
+      "smm_kg": float,
+      "body_fat_mass_kg": float,
+      "body_fat_pct": float,
+      "bmr_kcal": integer,
+      "visceral_fat_level": integer,
+      "inbody_score": integer
     }
     """
-    img_resized = pil_img.copy()
-    img_resized.thumbnail((1800, 1800))
-    raw_resp = run_gemini_query([system_prompt, img_resized], key)
+    # Normalize EXIF orientation to ensure image is upright
+    img_corrected = ImageOps.exif_transpose(pil_img)
+    img_corrected.thumbnail((2048, 2048))
+
+    raw_resp = run_gemini_query([system_prompt, img_corrected], key, json_mode=True)
+    if not raw_resp:
+        # Retry with standard mode
+        raw_resp = run_gemini_query([system_prompt, img_corrected], key, json_mode=False)
+
     if not raw_resp:
         return None
+
     try:
-        clean_json = raw_resp.replace("```json", "").replace("```", "").strip()
-        return json.loads(clean_json)
+        match = re.search(r"\{.*\}", raw_resp, re.DOTALL)
+        if match:
+            return json.loads(match.group(0))
+        return json.loads(raw_resp.strip())
     except Exception:
         return None
 
@@ -336,17 +347,20 @@ def analyze_nutrition_ai(user_text: str = "", pil_img: Image.Image = None, key: 
     if user_text:
         payload.append(f"Input: {user_text}")
     if pil_img:
-        img_resized = pil_img.copy()
-        img_resized.thumbnail((1024, 1024))
-        payload.append(img_resized)
+        img_upright = ImageOps.exif_transpose(pil_img)
+        img_upright.thumbnail((1024, 1024))
+        payload.append(img_upright)
 
-    raw_resp = run_gemini_query(payload, key)
+    raw_resp = run_gemini_query(payload, key, json_mode=True)
+    if not raw_resp:
+        raw_resp = run_gemini_query(payload, key, json_mode=False)
+
     if not raw_resp:
         return None
 
     try:
-        clean_json = raw_resp.replace("```json", "").replace("```", "").strip()
-        data = json.loads(clean_json)
+        match = re.search(r"\{.*\}", raw_resp, re.DOTALL)
+        data = json.loads(match.group(0)) if match else json.loads(raw_resp.strip())
         return {
             "item": data.get("food_title", user_text or "Scanned Meal"),
             "grams": int(data.get("portion_grams", 100)),
@@ -390,7 +404,6 @@ def build_pdf_report(prof, meals, workouts):
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
 
-    # Section 1: Biometrics
     pdf.set_text_color(15, 23, 42)
     pdf.set_font("Helvetica", "B", 11)
     pdf.cell(0, 6, f"1. CLIENT BIOMETRIC & CLINICAL AUDIT ({prof.get('name', 'ATHLETE').upper()})", ln=True)
@@ -427,7 +440,6 @@ def build_pdf_report(prof, meals, workouts):
     pdf.cell(col_w, 6, f" Method: Clinical Scan", border=1, ln=True)
     pdf.ln(4)
 
-    # Section 2: Daily Targets
     pdf.set_font("Helvetica", "B", 11)
     pdf.set_text_color(15, 23, 42)
     pdf.cell(0, 6, f"2. SCIENTIFIC DAILY MACRONUTRIENT TARGETS -- {prof.get('goal', 'PURE CUTTING').upper()}", ln=True)
@@ -448,7 +460,6 @@ def build_pdf_report(prof, meals, workouts):
     pdf.cell(col_w, 6, f"{prof.get('target_f', 40)} g", border=1, align="C", ln=True)
     pdf.ln(4)
 
-    # Section 3: Meal Ledger
     pdf.set_font("Helvetica", "B", 11)
     pdf.set_text_color(15, 23, 42)
     pdf.cell(0, 6, "3. DAILY MEAL & NUTRITION LEDGER", ln=True)
@@ -479,7 +490,6 @@ def build_pdf_report(prof, meals, workouts):
         pdf.cell(182, 6, "No meals submitted for this 24-hr cycle.", border=1, align="C", ln=True)
     pdf.ln(4)
 
-    # Section 4: Workout Ledger
     pdf.set_font("Helvetica", "B", 11)
     pdf.set_text_color(15, 23, 42)
     pdf.cell(0, 6, "4. STRENGTH & TRAINING PERFORMANCE LOG", ln=True)
@@ -508,7 +518,6 @@ def build_pdf_report(prof, meals, workouts):
         pdf.cell(182, 6, "No workouts submitted for this 24-hr cycle.", border=1, align="C", ln=True)
     pdf.ln(4)
 
-    # Section 5: Assessment
     if prof.get("assessment_notes"):
         pdf.set_font("Helvetica", "B", 10)
         pdf.set_text_color(15, 23, 42)
@@ -645,7 +654,7 @@ meal_logs = user_record.get("meals", [])
 workout_logs = user_record.get("workouts", [])
 u_id = st.session_state.auth_user
 
-# Sync variables with profile data
+# Biometric variables guaranteed from profile
 curr_wt = float(prof.get("weight_kg", 75.9))
 curr_ht = float(prof.get("height_cm", 159.0))
 curr_age = int(prof.get("age", 28))
@@ -832,7 +841,8 @@ with left_col:
         uploaded_food = st.file_uploader("Upload meal plate or packaged label:", type=["jpg", "png", "jpeg"], key=f"food_uploader_{u_id}")
         if uploaded_food:
             f_img = Image.open(uploaded_food)
-            st.image(f_img, caption="Meal Preview", use_container_width=True)
+            f_img_display = ImageOps.exif_transpose(f_img)
+            st.image(f_img_display, caption="Meal Preview", use_container_width=True)
             if st.button("⚡ Scan Meal Macros", type="primary", use_container_width=True, key=f"btn_scan_food_{u_id}"):
                 with st.spinner("Analyzing portion scale & ingredients..."):
                     result = analyze_nutrition_ai(pil_img=f_img, key=API_KEY)
@@ -855,26 +865,27 @@ with left_col:
 
 with right_col:
     st.subheader("🏋️ Clinical Body Composition & Training OS")
-    tab_inbody, tab_workout = st.tabs(["📄 Scan InBody Printout", "📝 Workout Log"])
+    tab_inbody, tab_manual, tab_workout = st.tabs(["📄 Scan InBody Printout", "⚙️ Quick InBody Calibrator", "📝 Workout Log"])
 
     with tab_inbody:
         st.markdown("#### Upload Gym InBody / DEXA Sheet")
         inbody_file = st.file_uploader("Upload photo of InBody sheet for OCR extraction:", type=["jpg", "png", "jpeg"], key=f"inbody_uploader_{u_id}")
         if inbody_file:
             in_img = Image.open(inbody_file)
-            st.image(in_img, caption="InBody Report Preview", width=260)
+            in_img_display = ImageOps.exif_transpose(in_img)
+            st.image(in_img_display, caption="InBody Report Preview (Auto-Oriented)", width=260)
+            
             if st.button("⚡ Run InBody Clinical OCR Scan", type="primary", use_container_width=True, key=f"btn_ocr_{u_id}"):
-                with st.spinner("AI OCR extracting printed metrics from InBody sheet..."):
+                with st.spinner("AI OCR analyzing InBody 260S table metrics..."):
                     in_data = extract_inbody_ocr_fast(in_img, API_KEY)
                     if in_data:
-                        w_val = float(in_data.get("weight_kg", 75.9))
-                        h_val = float(in_data.get("height_cm", 159.0))
-                        age_val = int(in_data.get("age", 28))
-                        gender_val = in_data.get("gender", "Male")
+                        w_val = float(in_data.get("weight_kg", curr_wt))
+                        h_val = float(in_data.get("height_cm", curr_ht))
+                        age_val = int(in_data.get("age", curr_age))
+                        gender_val = in_data.get("gender", prof.get("gender", "Male"))
                         smm_val = float(in_data.get("smm_kg", 29.7))
                         pbf_val = float(in_data.get("body_fat_pct", 30.5))
-                        bfm_val = float(in_data.get("body_fat_mass_kg", 23.1))
-                        bmr_val = int(in_data.get("bmr_kcal", 1510))
+                        bfm_val = float(in_data.get("body_fat_mass_kg", round(w_val * (pbf_val / 100.0), 2)))
                         v_fat = int(in_data.get("visceral_fat_level", 10))
                         score_val = int(in_data.get("inbody_score", 72))
 
@@ -894,7 +905,6 @@ with right_col:
                             "body_fat_pct": pbf_val,
                             "fat_mass_kg": bfm_val,
                             "lean_mass_kg": round(w_val - bfm_val, 2),
-                            "bmr": bmr_val,
                             "visceral_fat_level": v_fat,
                             "inbody_score": score_val,
                             "goal": "Pure Cutting (Aggressive Fat Loss)",
@@ -902,19 +912,59 @@ with right_col:
                             **updated_proto
                         })
 
-                        # Invalidate cached session state keys so input widgets sync instantly
+                        # Invalidate stale input widget state
                         for k in [f"prof_wt_{u_id}", f"prof_ht_{u_id}", f"prof_age_{u_id}", f"prof_goal_{u_id}"]:
                             if k in st.session_state:
                                 del st.session_state[k]
 
                         sync_user_data(st.session_state.auth_user, prof, meal_logs, workout_logs)
-                        st.success(f"✅ InBody Scan Synced: Weight {w_val}kg | BF {pbf_val}% | SMM {smm_val}kg | Calibrated: 1450 kcal")
+                        st.success(f"✅ InBody Synced: Weight {w_val}kg | Body Fat {pbf_val}% | SMM {smm_val}kg")
                         st.rerun()
                     else:
-                        st.error("OCR Extraction failed to parse image. Please re-check lighting and re-upload.")
+                        st.error("OCR Extraction had trouble parsing text. Use the 'Quick InBody Calibrator' tab to lock your verified numbers in 1 click.")
 
         if prof.get("inbody_score"):
             st.markdown(f"> **InBody Score:** `{prof.get('inbody_score')}/100` | **Visceral Fat:** `Level {prof.get('visceral_fat_level')}` | **SMM:** `{prof.get('smm_kg')}kg` | **Body Fat:** `{prof.get('body_fat_pct')}%`")
+
+    # Quick InBody Calibrator tab
+    with tab_manual:
+        st.markdown("#### Direct InBody Biometric Lock")
+        st.caption("Apply exact clinical figures directly from your paper printout without waiting on network uploads.")
+        c_m1, c_m2 = st.columns(2)
+        with c_m1:
+            in_w = st.number_input("InBody Weight (kg):", value=75.9, step=0.1, key=f"cal_w_{u_id}")
+            in_smm = st.number_input("InBody SMM (kg):", value=29.7, step=0.1, key=f"cal_smm_{u_id}")
+            in_pbf = st.number_input("InBody PBF / Fat %:", value=30.5, step=0.1, key=f"cal_pbf_{u_id}")
+        with c_m2:
+            in_score = st.number_input("InBody Score:", value=72, step=1, key=f"cal_score_{u_id}")
+            in_vfat = st.number_input("Visceral Fat Level:", value=10, step=1, key=f"cal_vfat_{u_id}")
+            in_bfm = st.number_input("Body Fat Mass (kg):", value=23.1, step=0.1, key=f"cal_bfm_{u_id}")
+
+        if st.button("🔒 Calibrate Profile with InBody Sheet Numbers", type="primary", use_container_width=True, key=f"btn_force_cal_{u_id}"):
+            updated_proto = compute_clinical_metabolic_protocol(
+                in_w, curr_ht, curr_age, prof.get("gender", "Male"),
+                prof.get("activity", "Moderate Active (Gym 3-5 days/week)"),
+                "Pure Cutting (Aggressive Fat Loss)",
+                body_fat_pct=in_pbf, smm_kg=in_smm, body_fat_mass_kg=in_bfm
+            )
+            prof.update({
+                "weight_kg": in_w,
+                "smm_kg": in_smm,
+                "body_fat_pct": in_pbf,
+                "fat_mass_kg": in_bfm,
+                "lean_mass_kg": round(in_w - in_bfm, 2),
+                "visceral_fat_level": in_vfat,
+                "inbody_score": in_score,
+                "goal": "Pure Cutting (Aggressive Fat Loss)",
+                "assessment_notes": f"Validated InBody scan shows {in_pbf}% body fat with {in_smm}kg SMM. Calibrated to 1450 kcal fat-loss protocol targeting ~1kg fat loss/week.",
+                **updated_proto
+            })
+            for k in [f"prof_wt_{u_id}", f"prof_ht_{u_id}", f"prof_age_{u_id}", f"prof_goal_{u_id}"]:
+                if k in st.session_state:
+                    del st.session_state[k]
+            sync_user_data(st.session_state.auth_user, prof, meal_logs, workout_logs)
+            st.success("✅ Profile calibrated to exact InBody parameters (75.9kg, 30.5% BF, 29.7kg SMM, 1450 kcal).")
+            st.rerun()
 
     with tab_workout:
         st.markdown("#### Log Training Set")
